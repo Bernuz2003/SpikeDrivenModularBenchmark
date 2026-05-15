@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m1-benchmark"
+version = "0.1.0"
+description = "Spike-driven modular benchmark for thesis Milestone 1"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pyyaml", "pandas", "matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

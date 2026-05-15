@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Datasets
+datasets/
+data/
+*.aedat4
+*.npy
+*.hdf5
+*.h5
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Experiment outputs
+runs/
+reports/
+logs/
+wandb/
+tensorboard/
+lightning_logs/
+
+# Checkpoints / models
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Containers
+*.sif
+*.sqsh
+containers/*.sif
+containers/*.sqsh
+
+# Temporary files
+tmp/
+cache/
+.cache/
+*.log
+
+# Local configs
+configs/local/
+
+# Agent
+agent/

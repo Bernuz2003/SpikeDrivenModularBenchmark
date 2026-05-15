@@ -1,0 +1,47 @@
+experiment:
+  name: m1_fe_conv_bn_lif_maxpool
+  milestone: M1
+  seed: 42
+
+dataset:
+  name: synthetic_dvs
+  height: 32
+  width: 32
+  num_classes: 10
+  num_train: 96
+  num_val: 32
+
+encoder:
+  name: fixed_time_binary
+  T: 8
+  polarity_channels: true
+  binarize: true
+
+model:
+  feature_extractor:
+    name: conv_bn_lif_maxpool
+    channels: [8, 16]
+    residual: none
+    output_format: tokens
+  attention:
+    name: identity
+  head:
+    name: temporal_spike_voting
+    terminal_readout: true
+
+training:
+  epochs: 2
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  surrogate_alpha: 4
+  profile_batches: 1
+  device: auto
+  num_workers: 0
+
+logging:
+  save_layer_metrics: true
+  save_frequency_metrics: true
+  save_temporal_metrics: true
+  output_dir: runs/milestone1/m1_fe_conv_bn_lif_maxpool

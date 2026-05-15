@@ -1,0 +1,7 @@
+numpy>=1.24
+pyyaml>=6.0
+pandas>=2.0
+matplotlib>=3.7
+pytest>=7.0
+# Optional for real event-based datasets:
+# tonic>=1.4

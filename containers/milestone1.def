@@ -1,0 +1,10 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+%post
+    apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/apt/lists/*
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+    pip install --no-cache-dir numpy pyyaml pandas matplotlib pytest
+
+%runscript
+    exec python "$@"
