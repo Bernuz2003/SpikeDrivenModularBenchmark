@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Example for SMILIES servers. Run inside a GNU screen session, ideally with:
-# screen -S m1_cifar_smoke -L -Logfile logs/m1_cifar_smoke.log
+# screen -S preattn_cifar_quick -L -Logfile logs/preattn_cifar_quick.log
 #
 # Singularity example:
 # singularity exec --nv \
 #   --bind /home/users/$USER:/workspace \
-#   containers/milestone1.sif \
-#   bash -lc "cd /workspace/milestone1_framework && python -m m1_benchmark.training.train --config configs/milestone1/real/cifar10_dvs_smoke.yaml"
+#   containers/pre_attention_benchmark.sif \
+#   bash -lc "cd /workspace/pre_attention_benchmark_framework && python -m pre_attention_benchmark.training.train --config configs/pre_attention_benchmark/real/cifar10_dvs_quick_check.yaml"
 export PYTHONPATH=${PYTHONPATH:-}:$PWD/src
-python -m m1_benchmark.training.train --config "${1:-configs/milestone1/smoke/synthetic_smoke.yaml}"
+python -m pre_attention_benchmark.training.train --config "${1:-configs/pre_attention_benchmark/real/cifar10_dvs_quick_check.yaml}"

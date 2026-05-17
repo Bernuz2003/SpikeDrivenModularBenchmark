@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from m1_benchmark.training.train import run
+from pre_attention_benchmark.training.train import run
 
 
 def main():
@@ -17,6 +17,8 @@ def main():
     if not cfgs:
         raise SystemExit(f'No YAML configs found in {args.config_dir}')
     for cfg in cfgs:
+        # Sequenziale di proposito: sui server e piu facile associare log e artifact
+        # a una singola config, senza processi concorrenti che si pestano i piedi.
         print(f'\n=== Running {cfg} ===')
         try:
             run(cfg)

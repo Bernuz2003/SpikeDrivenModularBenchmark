@@ -4,25 +4,27 @@ import pytest
 import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from m1_benchmark.config import load_config, validate_milestone1_config, ConfigError
-from m1_benchmark.datasets import build_encoder
-from m1_benchmark.metrics.collector import MetricsCollector
-from m1_benchmark.models.validators import validate_hidden_outputs
+from pre_attention_benchmark.config import load_config, validate_pre_attention_config, ConfigError
+from pre_attention_benchmark.datasets import build_encoder
+from pre_attention_benchmark.metrics.collector import MetricsCollector
+from pre_attention_benchmark.models.validators import validate_hidden_outputs
 
 
 def test_attention_not_identity_rejected():
-    cfg = load_config(ROOT / 'configs/milestone1/invalid/attention_not_identity.yaml')
+    cfg = load_config(ROOT / 'configs/pre_attention_benchmark/invalid/attention_not_identity.yaml')
     with pytest.raises(ConfigError):
-        validate_milestone1_config(cfg)
+        validate_pre_attention_config(cfg)
 
 
 def test_sew_residual_rejected():
-    cfg = load_config(ROOT / 'configs/milestone1/invalid/sew_residual.yaml')
+    cfg = load_config(ROOT / 'configs/pre_attention_benchmark/invalid/sew_residual.yaml')
     with pytest.raises(ConfigError):
-        validate_milestone1_config(cfg)
+        validate_pre_attention_config(cfg)
 
 
 def test_encoder_outputs_binary_and_metadata():
+    # Il test usa eventi minimi costruiti in memoria: controlla l'encoder senza
+    # dipendere dal download dei dataset reali.
     enc = build_encoder({'name': 'fixed_event_count_binary', 'T': 4, 'binarize': True}, {'height': 8, 'width': 8})
     events = {
         't': torch.arange(10).numpy(),
@@ -60,6 +62,7 @@ def test_hidden_boundary_validator_catches_non_binary_output():
 
 
 def test_temporal_density_supports_tokens():
+    # Caso token [B,T,N,D], diverso dalle mappe [B,T,C,H,W] viste dai conv.
     collector = MetricsCollector(torch.nn.Identity(), run_id='test')
     x = torch.zeros(2, 3, 4, 5)
     x[:, 1] = 1

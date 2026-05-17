@@ -21,9 +21,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Datasets
-datasets/
-data/
+# Datasets locali alla root del progetto.
+# Non usare "datasets/" senza slash iniziale: ignorerebbe anche il package Python src/.../datasets.
+/datasets/
+/data/
 *.aedat4
 *.npy
 *.hdf5

@@ -1,0 +1,50 @@
+experiment:
+  name: robust_temporal_jitter_05
+  benchmark: pre_attention
+  seed: 42
+
+dataset:
+  name: cifar10_dvs
+  root: /path/to/datasets/tonic
+  height: 128
+  width: 128
+  num_classes: 10
+  num_train: 512
+  num_val: 128
+  augmentations:
+    temporal_jitter: 0.05
+
+encoder:
+  name: fixed_time_binary
+  T: 6
+  polarity_channels: true
+  binarize: true
+
+model:
+  feature_extractor:
+    name: conv_bn_lif_maxpool
+    channels: [8, 16]
+    residual: none
+    output_format: tokens
+  attention:
+    name: identity
+  head:
+    name: last_timestep_spike_readout
+    terminal_readout: true
+
+training:
+  epochs: 1
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  surrogate_alpha: 4
+  profile_batches: 1
+  device: auto
+  num_workers: 0
+
+logging:
+  save_layer_metrics: true
+  save_frequency_metrics: true
+  save_temporal_metrics: true
+  output_dir: runs/pre_attention_benchmark/robust_temporal_jitter_05
