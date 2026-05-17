@@ -116,18 +116,20 @@ def _plot_spike_density_timestep(out_dir: Path, layer_df: pd.DataFrame) -> None:
     plt.close()
 
 
-def aggregate_reports(runs_dir: str | Path, out_dir: str | Path) -> None:
+def aggregate_reports(runs_dir: str | Path, out_dir: str | Path, dataset: str | None = None) -> None:
     runs_dir = Path(runs_dir)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for p in runs_dir.glob('*/metrics_summary.json'):
+    for p in runs_dir.rglob('metrics_summary.json'):
         try:
             rows.append(json.loads(p.read_text(encoding='utf-8')))
         except Exception:
             # Un run parziale non deve bloccare l'aggregato; resta nei log della run.
             pass
     df = pd.DataFrame(rows)
+    if dataset and not df.empty and 'dataset' in df.columns:
+        df = df[df['dataset'].astype(str).str.lower() == dataset.lower()].copy()
     if df.empty:
         (out_dir / 'PreAttentionBenchmark_Report.md').write_text('# Pre-Attention Benchmark Aggregate Report\n\nNo runs found.\n', encoding='utf-8')
         return

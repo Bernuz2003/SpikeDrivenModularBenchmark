@@ -9,8 +9,8 @@ dataset:
   height: 128
   width: 128
   num_classes: 10
-  num_train: 512
-  num_val: 128
+  num_train: null
+  num_val: null
 
 encoder:
   name: binary_voxel_grid
@@ -21,7 +21,7 @@ encoder:
 model:
   feature_extractor:
     name: conv_bn_lif_maxpool
-    channels: [8, 16]
+    channels: [16, 32]
     residual: none
     output_format: tokens
   attention:
@@ -31,18 +31,21 @@ model:
     terminal_readout: true
 
 training:
-  epochs: 2
+  epochs: 100
   batch_size: 16
   optimizer: adamw
   lr: 0.001
   weight_decay: 0.0001
+  scheduler: cosine
+  min_lr: 0.00001
+  pin_memory: true
   surrogate_alpha: 4
   profile_batches: 1
   device: auto
-  num_workers: 0
+  num_workers: 4
 
 logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: ${PREATTN_RUNS_ROOT}/enc_binary_voxel_grid
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/enc_binary_voxel_grid

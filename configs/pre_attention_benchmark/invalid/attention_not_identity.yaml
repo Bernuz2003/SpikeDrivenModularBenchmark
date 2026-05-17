@@ -36,6 +36,9 @@ training:
   optimizer: adamw
   lr: 0.001
   weight_decay: 0.0001
+  scheduler: cosine
+  min_lr: 0.00001
+  pin_memory: true
   surrogate_alpha: 4
   profile_batches: 1
   device: auto
@@ -45,4 +48,4 @@ logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: ${PREATTN_RUNS_ROOT}/invalid_attention
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/invalid_attention

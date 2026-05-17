@@ -83,11 +83,14 @@ def evaluate(model, loader, device, collector: MetricsCollector | None = None, p
 
 
 def make_loader(ds, cfg: dict, shuffle: bool = False) -> DataLoader:
+    num_workers = int(cfg['training'].get('num_workers', 0))
     return DataLoader(
         ds,
         batch_size=int(cfg['training']['batch_size']),
         shuffle=shuffle,
-        num_workers=int(cfg['training'].get('num_workers', 0)),
+        num_workers=num_workers,
+        pin_memory=bool(cfg['training'].get('pin_memory', torch.cuda.is_available())),
+        persistent_workers=num_workers > 0,
     )
 
 
@@ -194,6 +197,19 @@ def ensure_runtime_paths_resolved(cfg: dict) -> None:
         )
 
 
+def build_scheduler(optimizer: torch.optim.Optimizer, cfg: dict, epochs: int):
+    name = str(cfg.get('training', {}).get('scheduler', 'cosine')).lower()
+    if name in {'none', 'null', 'false', 'off'}:
+        return None
+    if name == 'cosine':
+        return torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max(1, int(epochs)),
+            eta_min=float(cfg['training'].get('min_lr', 1e-5)),
+        )
+    raise ValueError(f'Unknown scheduler: {name}')
+
+
 def run(config_path: str | Path) -> dict:
     cfg = load_config(config_path)
     validate_pre_attention_config(cfg)
@@ -230,6 +246,8 @@ def run(config_path: str | Path) -> dict:
     else:
         raise ValueError(f'Unknown optimizer: {optimizer_name}')
 
+    epochs = int(cfg['training']['epochs'])
+    scheduler = build_scheduler(optimizer, cfg, epochs)
     best_acc = -1.0
     best_state = None
     history = []
@@ -241,10 +259,11 @@ def run(config_path: str | Path) -> dict:
         model.load_state_dict(ckpt['model'])
         if 'optimizer' in ckpt:
             optimizer.load_state_dict(ckpt['optimizer'])
+        if scheduler is not None and 'scheduler' in ckpt:
+            scheduler.load_state_dict(ckpt['scheduler'])
         history = list(ckpt.get('history', []))
         best_acc = float(ckpt.get('best_acc', ckpt.get('best_accuracy_top1', -1.0)))
         start_epoch = int(ckpt.get('epoch', len(history))) + 1
-    epochs = int(cfg['training']['epochs'])
     for epoch in range(start_epoch, epochs + 1):
         tr_loss, tr_acc = train_one_epoch(
             model,
@@ -255,14 +274,23 @@ def run(config_path: str | Path) -> dict:
             log_interval_batches=int(cfg['training'].get('log_interval_batches', 25) or 0),
         )
         val_loss, val_acc = evaluate(model, val_loader, device)
-        history.append({'epoch': epoch, 'train_loss': tr_loss, 'train_acc': tr_acc, 'val_loss': val_loss, 'val_acc': val_acc})
-        print(f"epoch={epoch:03d} train_loss={tr_loss:.4f} train_acc={tr_acc:.3f} val_loss={val_loss:.4f} val_acc={val_acc:.3f}", flush=True)
+        if scheduler is not None:
+            scheduler.step()
+        current_lr = float(optimizer.param_groups[0]['lr'])
+        history.append({'epoch': epoch, 'train_loss': tr_loss, 'train_acc': tr_acc, 'val_loss': val_loss, 'val_acc': val_acc, 'lr': current_lr})
+        print(f"epoch={epoch:03d} lr={current_lr:.6g} train_loss={tr_loss:.4f} train_acc={tr_acc:.3f} val_loss={val_loss:.4f} val_acc={val_acc:.3f}", flush=True)
         if val_acc > best_acc:
             best_acc = val_acc
             best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
-            torch.save({'model': best_state, 'optimizer': optimizer.state_dict(), 'cfg': cfg, 'history': history, 'epoch': epoch, 'best_acc': best_acc}, out_dir / 'checkpoint_best.pt')
+            ckpt = {'model': best_state, 'optimizer': optimizer.state_dict(), 'cfg': cfg, 'history': history, 'epoch': epoch, 'best_acc': best_acc}
+            if scheduler is not None:
+                ckpt['scheduler'] = scheduler.state_dict()
+            torch.save(ckpt, out_dir / 'checkpoint_best.pt')
 
-    torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'cfg': cfg, 'history': history, 'epoch': epochs, 'best_acc': best_acc}, out_dir / 'checkpoint_final.pt')
+    final_ckpt = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'cfg': cfg, 'history': history, 'epoch': epochs, 'best_acc': best_acc}
+    if scheduler is not None:
+        final_ckpt['scheduler'] = scheduler.state_dict()
+    torch.save(final_ckpt, out_dir / 'checkpoint_final.pt')
 
     collector = MetricsCollector(model, run_id=cfg['experiment']['name'])
     collector.attach()

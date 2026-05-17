@@ -104,6 +104,15 @@ python scripts/aggregate_reports.py
 
 Il report aggregato produce `summary.csv`, `pareto_front.csv`, grafici Pareto accuracy/costo e una decision table preliminare per scegliere i candidati da portare nella fase attention.
 
+Ogni run usa un solo dataset, definito da `dataset.name` nella YAML. Non c'e merge automatico tra CIFAR10-DVS e DVS128 Gesture. I risultati restano separati nel campo `dataset` e nei path sotto `${PREATTN_RUNS_ROOT}/<dataset>/...`.
+
+Per aggregare solo un dataset:
+
+```bash
+python scripts/aggregate_reports.py --dataset cifar10_dvs
+python scripts/aggregate_reports.py --dataset dvs128_gesture --out-dir ${PREATTN_REPORTS_ROOT}/dvs128_gesture
+```
+
 ## Log Durante Run Lunghe
 
 Il training stampa sempre un riepilogo a fine epoca. Per avere output periodico anche dentro epoche lunghe:

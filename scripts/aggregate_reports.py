@@ -19,9 +19,10 @@ def main():
         default_reports = 'reports/pre_attention_benchmark'
     ap.add_argument('--runs-dir', default=default_runs)
     ap.add_argument('--out-dir', default=default_reports)
+    ap.add_argument('--dataset', default=None, help='Optional dataset filter, e.g. cifar10_dvs or dvs128_gesture.')
     args = ap.parse_args()
     # Aggrega solo gli artifact gia prodotti: non ricalcola metriche e non tocca checkpoint.
-    aggregate_reports(args.runs_dir, args.out_dir)
+    aggregate_reports(args.runs_dir, args.out_dir, dataset=args.dataset)
 
 if __name__ == '__main__':
     main()
