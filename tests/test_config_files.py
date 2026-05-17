@@ -6,7 +6,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
-from pre_attention_benchmark.config import ConfigError, load_config, validate_pre_attention_config
+from pre_attention_benchmark.config import (
+    ConfigError,
+    expand_config_placeholders,
+    has_unresolved_placeholders,
+    load_config,
+    validate_pre_attention_config,
+)
 
 
 def test_all_public_configs_validate_statically():
@@ -26,3 +32,20 @@ def test_all_public_configs_validate_statically():
 def test_invalid_configs_are_rejected(path: Path):
     with pytest.raises(ConfigError):
         validate_pre_attention_config(load_config(path))
+
+
+def test_path_placeholders_expand_from_variables():
+    cfg = {
+        'dataset': {'root': '${PREATTN_DATA_ROOT}'},
+        'logging': {'output_dir': '${PREATTN_RUNS_ROOT}/run_a'},
+    }
+    out = expand_config_placeholders(
+        cfg,
+        {
+            'PREATTN_DATA_ROOT': '/tmp/data',
+            'PREATTN_RUNS_ROOT': '/tmp/runs',
+        },
+    )
+    assert out['dataset']['root'] == '/tmp/data'
+    assert out['logging']['output_dir'] == '/tmp/runs/run_a'
+    assert not has_unresolved_placeholders(out)

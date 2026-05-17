@@ -25,33 +25,37 @@ python -m pip install -e ".[dev,datasets]"
 
 Se sul server serve una build PyTorch CUDA specifica, installare prima PyTorch seguendo la versione CUDA disponibile, poi rieseguire l'installazione editable del progetto.
 
-## Quick Check Reale
+## Path Locali
 
-Prima di lanciare sweep lunghi, copia una config reale in `configs/local/` e imposta `dataset.root`:
+Le config versionate usano placeholder come `${PREATTN_DATA_ROOT}` e `${PREATTN_RUNS_ROOT}`. I path reali non vanno committati: mettili in un file locale ignorato da Git.
 
 ```bash
 mkdir -p configs/local
-cp configs/pre_attention_benchmark/real/cifar10_dvs_quick_check.yaml configs/local/cifar10_dvs_quick_check.yaml
+cp configs/PATHS.example.yaml configs/local/paths.yaml
 ```
 
-Nel file copiato:
+Poi modifica `configs/local/paths.yaml`:
 
 ```yaml
-dataset:
-  name: cifar10_dvs
-  root: /path/to/datasets/tonic
+PREATTN_DATA_ROOT: /path/to/datasets/tonic
+PREATTN_RUNS_ROOT: /path/to/runs/pre_attention_benchmark
+PREATTN_REPORTS_ROOT: /path/to/reports/pre_attention_benchmark
 ```
 
-Poi:
+In alternativa puoi esportare le stesse variabili d'ambiente; hanno precedenza sul file locale.
+
+## Quick Check Reale
+
+Prima di lanciare sweep lunghi:
 
 ```bash
-python -m pre_attention_benchmark.training.train --config configs/local/cifar10_dvs_quick_check.yaml
+python -m pre_attention_benchmark.training.train --config configs/pre_attention_benchmark/real/cifar10_dvs_quick_check.yaml
 ```
 
 Output principale:
 
 ```text
-runs/pre_attention_benchmark/cifar10_dvs_quick_check/
+${PREATTN_RUNS_ROOT}/cifar10_dvs_quick_check/
   config.yaml
   config.json
   dataset_split.json
@@ -84,7 +88,7 @@ python scripts/run_sweep.py --config-dir configs/pre_attention_benchmark/head_sw
 python scripts/run_sweep.py --config-dir configs/pre_attention_benchmark/robustness
 ```
 
-Per run ufficiali e riproducibili e meglio copiare le config in `configs/local/`, correggere `dataset.root` e, se necessario, portare `logging.output_dir` su una directory persistente del server.
+Per run ufficiali e riproducibili puoi copiare le config in `configs/local/` solo se vuoi modificare iperparametri o subset. I path reali restano in `configs/local/paths.yaml`.
 
 Quando hai preparato una copia locale con la stessa struttura puoi lanciare tutto in sequenza:
 
@@ -95,7 +99,7 @@ bash scripts/run_pre_attention_suite.sh configs/local/pre_attention_benchmark
 ## Aggregazione Report
 
 ```bash
-python scripts/aggregate_reports.py --runs-dir runs/pre_attention_benchmark --out-dir reports/pre_attention_benchmark
+python scripts/aggregate_reports.py
 ```
 
 Il report aggregato produce `summary.csv`, `pareto_front.csv`, grafici Pareto accuracy/costo e una decision table preliminare per scegliere i candidati da portare nella fase attention.

@@ -4,8 +4,13 @@ from pathlib import Path
 from typing import Any, MutableMapping
 import copy
 import json
+import os
+import re
 import subprocess
 import yaml
+
+_PLACEHOLDER_RE = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+_LOCAL_PATHS_FILE = Path('configs/local/paths.yaml')
 
 
 class ConfigError(ValueError):
@@ -17,7 +22,43 @@ def load_config(path: str | Path) -> dict[str, Any]:
     with path.open('r', encoding='utf-8') as f:
         cfg = yaml.safe_load(f) or {}
     cfg['_config_path'] = str(path)
-    return apply_defaults(cfg)
+    return expand_config_placeholders(apply_defaults(cfg))
+
+
+def load_path_variables(path_file: str | Path | None = None) -> dict[str, str]:
+    variables: dict[str, str] = {}
+    local_file = Path(path_file or os.environ.get('PREATTN_PATHS_FILE', _LOCAL_PATHS_FILE))
+    if local_file.exists():
+        with local_file.open('r', encoding='utf-8') as f:
+            raw = yaml.safe_load(f) or {}
+        for key, value in raw.items():
+            variables[str(key)] = str(value)
+    # Le variabili d'ambiente vincono sul file locale: comodo negli script batch.
+    variables.update({k: v for k, v in os.environ.items() if k.startswith('PREATTN_')})
+    return variables
+
+
+def expand_config_placeholders(value: Any, variables: dict[str, str] | None = None) -> Any:
+    variables = load_path_variables() if variables is None else variables
+    if isinstance(value, dict):
+        return {k: expand_config_placeholders(v, variables) for k, v in value.items()}
+    if isinstance(value, list):
+        return [expand_config_placeholders(v, variables) for v in value]
+    if isinstance(value, str):
+        def repl(match: re.Match[str]) -> str:
+            name = match.group(1)
+            return variables.get(name, match.group(0))
+
+        return os.path.expanduser(_PLACEHOLDER_RE.sub(repl, value))
+    return value
+
+
+def has_unresolved_placeholders(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(has_unresolved_placeholders(v) for v in value.values())
+    if isinstance(value, list):
+        return any(has_unresolved_placeholders(v) for v in value)
+    return isinstance(value, str) and bool(_PLACEHOLDER_RE.search(value))
 
 
 def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:

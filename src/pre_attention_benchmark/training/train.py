@@ -8,7 +8,15 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 
-from pre_attention_benchmark.config import load_config, save_config, save_config_json, validate_pre_attention_config, get_git_commit, get_git_metadata
+from pre_attention_benchmark.config import (
+    has_unresolved_placeholders,
+    load_config,
+    save_config,
+    save_config_json,
+    validate_pre_attention_config,
+    get_git_commit,
+    get_git_metadata,
+)
 from pre_attention_benchmark.datasets import build_datasets, dataset_metadata
 from pre_attention_benchmark.models import build_model
 from pre_attention_benchmark.models.validators import validate_model_static, validate_hidden_outputs
@@ -172,9 +180,24 @@ def evaluate_robustness(model, cfg: dict, device: torch.device, clean_acc: float
     }
 
 
+def ensure_runtime_paths_resolved(cfg: dict) -> None:
+    paths = {
+        'dataset.root': cfg.get('dataset', {}).get('root'),
+        'logging.output_dir': cfg.get('logging', {}).get('output_dir'),
+    }
+    unresolved = [name for name, value in paths.items() if has_unresolved_placeholders(value)]
+    if unresolved:
+        joined = ', '.join(unresolved)
+        raise RuntimeError(
+            f"Unresolved path placeholders in {joined}. "
+            "Create configs/local/paths.yaml or export PREATTN_DATA_ROOT/PREATTN_RUNS_ROOT."
+        )
+
+
 def run(config_path: str | Path) -> dict:
     cfg = load_config(config_path)
     validate_pre_attention_config(cfg)
+    ensure_runtime_paths_resolved(cfg)
     configure_torch_runtime(cfg.get('training', {}).get('torch_num_threads', 1))
     seed_everything(int(cfg['experiment']['seed']))
     device = get_device(cfg['training'].get('device', 'auto'))

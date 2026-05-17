@@ -5,7 +5,7 @@ experiment:
 
 dataset:
   name: cifar10_dvs
-  root: /path/to/datasets/tonic
+  root: ${PREATTN_DATA_ROOT}
   height: 128
   width: 128
   num_classes: 10
@@ -50,4 +50,4 @@ logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: runs/pre_attention_benchmark/cifar10_dvs_quick_check
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs_quick_check

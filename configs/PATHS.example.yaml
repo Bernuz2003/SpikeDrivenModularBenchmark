@@ -1,0 +1,3 @@
+PREATTN_DATA_ROOT: /path/to/datasets/tonic
+PREATTN_RUNS_ROOT: runs/pre_attention_benchmark
+PREATTN_REPORTS_ROOT: reports/pre_attention_benchmark
