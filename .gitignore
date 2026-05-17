@@ -48,7 +48,8 @@ lightning_logs/
 *.ckpt
 *.onnx
 
-# Containers
+# Containers locali
+containers/
 *.sif
 *.sqsh
 containers/*.sif

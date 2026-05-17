@@ -109,7 +109,7 @@ training:
   log_interval_batches: 25
 ```
 
-Le `print` sono flushate, quindi funzionano bene con `screen -L`, `tail -f` e log file su SMILIES.
+Le `print` sono flushate, quindi funzionano bene con `screen -L`, `tail -f` e log file su server remoti.
 
 ## Principi
 
