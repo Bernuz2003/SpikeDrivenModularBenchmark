@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
-import csv
-import math
 import json
 import torch
 from torch import nn
@@ -27,6 +24,7 @@ class LayerMetric:
     firing_rate: float
     spike_density_mean: float
     spike_density_std: float
+    spike_density_timestep: str
     burstiness: float
     params: int
     weight_mem_bits: int
@@ -82,6 +80,8 @@ class MetricsCollector:
         self.enabled = False
 
     def _should_track(self, module: nn.Module) -> bool:
+        if getattr(module, '_m1_skip_metrics', False):
+            return False
         return (
             getattr(module, 'track_metrics', False)
             or isinstance(module, (nn.Conv2d, nn.Linear, nn.BatchNorm2d, nn.MaxPool2d))
@@ -121,7 +121,7 @@ class MetricsCollector:
         numel = int(out.numel())
         spike_count = float(out.detach().sum().item()) if is_bin else 0.0
         firing_rate = spike_count / max(1, numel) if is_bin else 0.0
-        density_mean, density_std, burst = self._temporal_density(out.detach(), is_bin)
+        density_mean, density_std, burst, density_timestep = self._temporal_density(out.detach(), is_bin)
         params = sum(p.numel() for p in module.parameters(recurse=False) if p.requires_grad)
         weight_bits = params * self.bit_weights
         act_bits = numel * (1 if is_bin else 32)
@@ -140,6 +140,7 @@ class MetricsCollector:
             firing_rate=firing_rate,
             spike_density_mean=density_mean,
             spike_density_std=density_std,
+            spike_density_timestep=json.dumps(density_timestep),
             burstiness=burst,
             params=params,
             weight_mem_bits=weight_bits,
@@ -156,21 +157,21 @@ class MetricsCollector:
             hf_ratio=hf,
         )
 
-    def _temporal_density(self, out: torch.Tensor, is_bin: bool) -> tuple[float, float, float]:
+    def _temporal_density(self, out: torch.Tensor, is_bin: bool) -> tuple[float, float, float, list[float]]:
         if not is_bin or out.dim() < 3:
-            return 0.0, 0.0, 0.0
-        # [B,T,...] expected for spike tensors. Conv hooks may be [B*T,C,H,W]; still handled conservatively.
+            return 0.0, 0.0, 0.0, []
+        # [B,T,...] expected for spike tensors. Conv hooks may be [B*T,C,H,W]; those do not expose T.
         if out.dim() in (4, 5):
             if out.dim() == 5:
                 dens = out.float().mean(dim=tuple(i for i in range(out.dim()) if i != 1))
             elif out.dim() == 4:
-                return 0.0, 0.0, 0.0
+                dens = out.float().mean(dim=(0, 2, 3))
             mean = float(dens.mean().cpu())
             std = float(dens.std(unbiased=False).cpu())
             var = float(dens.var(unbiased=False).cpu())
             burst = var / (mean + 1e-12)
-            return mean, std, burst
-        return 0.0, 0.0, 0.0
+            return mean, std, burst, [float(v) for v in dens.detach().cpu().flatten()]
+        return 0.0, 0.0, 0.0, []
 
     def _state_bits(self, module: nn.Module) -> int:
         shape = getattr(module, 'last_state_shape', None)
@@ -188,7 +189,7 @@ class MetricsCollector:
             # Streaming line buffer proxy: input channels * k rows * width.
             width = int(inp.shape[-1]) if inp.dim() >= 4 else 1
             return int(module.in_channels * k * width * bit)
-        if isinstance(module, (nn.MaxPool2d,)):
+        if isinstance(module, (nn.MaxPool2d,)) or module.__class__.__name__ == 'TDMaxPool':
             return int(out.numel() * bit)
         return 0
 
@@ -211,8 +212,9 @@ class MetricsCollector:
             dense = float(inp.numel() * module.out_features)
             z['mac_dense_ops'] = dense
             z['sops_proxy'] = dense
-        elif isinstance(module, nn.MaxPool2d):
-            k_h, k_w = module.kernel_size if isinstance(module.kernel_size, tuple) else (module.kernel_size, module.kernel_size)
+        elif isinstance(module, nn.MaxPool2d) or module.__class__.__name__ == 'TDMaxPool':
+            kernel = getattr(module, 'kernel_size', 1)
+            k_h, k_w = kernel if isinstance(kernel, tuple) else (kernel, kernel)
             z['maxpool_compare_ops'] = float(out.numel() * max(0, k_h * k_w - 1))
             z['sops_proxy'] = z['maxpool_compare_ops']
         elif module.__class__.__name__.lower().endswith('lif') or 'lif' in module.__class__.__name__.lower():
@@ -230,6 +232,8 @@ class MetricsCollector:
             'output_shape': list(out.shape) if out is not None else None,
             'op_class': getattr(module, 'op_class', module.__class__.__name__),
             'requires_state': bool(getattr(module, 'requires_state', False)),
+            'terminal_readout': bool(getattr(module, 'terminal_readout', False)),
+            'emits_hidden_spikes': bool(getattr(module, 'emits_hidden_spikes', False)),
         }
         if isinstance(module, nn.Conv2d):
             entry.update({
@@ -239,6 +243,22 @@ class MetricsCollector:
                 'out_channels': module.out_channels,
                 'groups': module.groups,
             })
+            if inp is not None and inp.dim() >= 4:
+                k_h = module.kernel_size[0] if isinstance(module.kernel_size, tuple) else module.kernel_size
+                entry['buffer_shape_proxy'] = [module.in_channels, k_h, int(inp.shape[-1])]
+        if module.__class__.__name__ == 'TDMaxPool' and out is not None:
+            entry['buffer_shape_proxy'] = list(out.shape)
+        if hasattr(module, 'last_membrane_range'):
+            entry['membrane_range'] = getattr(module, 'last_membrane_range')
+        weight = getattr(module, 'weight', None)
+        if isinstance(weight, torch.Tensor):
+            w = weight.detach()
+            entry['weight_stats'] = {
+                'min': float(w.min().cpu()) if w.numel() else 0.0,
+                'max': float(w.max().cpu()) if w.numel() else 0.0,
+                'mean': float(w.mean().cpu()) if w.numel() else 0.0,
+                'std': float(w.std(unbiased=False).cpu()) if w.numel() else 0.0,
+            }
         return entry
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -267,15 +287,48 @@ def summarize_layer_metrics(df: pd.DataFrame) -> dict[str, Any]:
             'total_activation_mem_bits': 0,
             'total_state_mem_bits': 0,
             'max_buffer_mem_bits': 0,
+            'operator_class_count': {},
+            'total_mac_dense_ops': 0,
+            'total_ac_sparse_ops': 0,
+            'total_and_ops': 0,
+            'total_compare_ops': 0,
+            'total_shift_ops': 0,
+            'total_maxpool_compare_ops': 0,
         }
-    # Hooks may fire multiple times across profiled batches; aggregate by sum for counts and mean for rates.
+    # Hooks may fire multiple times across profiled batches. Aggregate by layer
+    # first so memory/params describe one representative forward pass.
+    grouped = df.groupby('layer_name', as_index=False).agg({
+        'params': 'first',
+        'sops_proxy': 'mean',
+        'spike_count': 'mean',
+        'firing_rate': 'mean',
+        'weight_mem_bits': 'first',
+        'activation_mem_bits': 'max',
+        'state_mem_bits': 'max',
+        'buffer_mem_bits': 'max',
+        'module_type': 'first',
+        'mac_dense_ops': 'mean',
+        'ac_sparse_ops': 'mean',
+        'and_ops': 'mean',
+        'compare_ops': 'mean',
+        'shift_ops': 'mean',
+        'maxpool_compare_ops': 'mean',
+    })
+    op_counts = df.groupby('module_type')['layer_name'].nunique().to_dict()
     return {
-        'total_params_profiled': int(df['params'].sum()),
-        'total_sops_proxy': float(df['sops_proxy'].sum()),
-        'total_spike_count': float(df['spike_count'].sum()),
+        'total_params_profiled': int(grouped['params'].sum()),
+        'total_sops_proxy': float(grouped['sops_proxy'].sum()),
+        'total_spike_count': float(grouped['spike_count'].sum()),
         'mean_firing_rate': float(df.loc[df['is_binary_output'] == True, 'firing_rate'].mean()) if (df['is_binary_output'] == True).any() else 0.0,
-        'total_weight_mem_bits': int(df['weight_mem_bits'].sum()),
-        'total_activation_mem_bits': int(df['activation_mem_bits'].sum()),
-        'total_state_mem_bits': int(df['state_mem_bits'].sum()),
-        'max_buffer_mem_bits': int(df['buffer_mem_bits'].max()),
+        'total_weight_mem_bits': int(grouped['weight_mem_bits'].sum()),
+        'total_activation_mem_bits': int(grouped['activation_mem_bits'].sum()),
+        'total_state_mem_bits': int(grouped['state_mem_bits'].sum()),
+        'max_buffer_mem_bits': int(grouped['buffer_mem_bits'].max()),
+        'operator_class_count': {str(k): int(v) for k, v in op_counts.items()},
+        'total_mac_dense_ops': float(grouped['mac_dense_ops'].sum()),
+        'total_ac_sparse_ops': float(grouped['ac_sparse_ops'].sum()),
+        'total_and_ops': float(grouped['and_ops'].sum()),
+        'total_compare_ops': float(grouped['compare_ops'].sum()),
+        'total_shift_ops': float(grouped['shift_ops'].sum()),
+        'total_maxpool_compare_ops': float(grouped['maxpool_compare_ops'].sum()),
     }

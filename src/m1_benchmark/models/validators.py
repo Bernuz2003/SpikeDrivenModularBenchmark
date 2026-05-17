@@ -16,10 +16,32 @@ def validate_model_static(model: torch.nn.Module) -> None:
 
 def validate_hidden_outputs(model, sample: torch.Tensor, device: torch.device) -> None:
     model.eval()
+    violations: list[str] = []
+    handles = []
+
+    def hook(name: str):
+        def fn(module, inputs, output):
+            out = output[0] if isinstance(output, (tuple, list)) and output else output
+            if isinstance(out, torch.Tensor) and not tensor_is_binary(out.detach()):
+                violations.append(f'{name} emitted non-binary hidden output with shape {tuple(out.shape)}')
+        return fn
+
+    for name, module in model.named_modules():
+        if getattr(module, 'emits_hidden_spikes', False):
+            handles.append(module.register_forward_hook(hook(name)))
+
     with torch.no_grad():
-        sample = sample.to(device)
-        if sample.dim() == 4:
-            sample = sample.unsqueeze(0)
-        if not tensor_is_binary(sample):
-            raise RuntimeError('Input spike tensor is not binary.')
-        _ = model(sample, validate_hidden_binary=True)
+        try:
+            sample = sample.to(device)
+            if sample.dim() == 4:
+                sample = sample.unsqueeze(0)
+            if not tensor_is_binary(sample):
+                raise RuntimeError('Input spike tensor is not binary.')
+            _ = model(sample, validate_hidden_binary=True)
+        finally:
+            for h in handles:
+                h.remove()
+    if violations:
+        joined = '; '.join(violations[:5])
+        more = '' if len(violations) <= 5 else f'; ... {len(violations) - 5} more'
+        raise RuntimeError(f'Hidden spike communication violated: {joined}{more}')

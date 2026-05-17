@@ -31,11 +31,14 @@ def apply_event_augmentations(events: dict[str, Any], cfg: dict[str, Any] | None
     return out
 
 
-def apply_spike_augmentations(spikes: torch.Tensor, cfg: dict[str, Any] | None) -> torch.Tensor:
+def apply_spike_augmentations(spikes: torch.Tensor, cfg: dict[str, Any] | None, rng: np.random.Generator | None = None) -> torch.Tensor:
     if not cfg:
         return spikes
     if cfg.get('timestep_shuffle', False):
-        perm = torch.randperm(spikes.shape[0])
+        if rng is None:
+            perm = torch.randperm(spikes.shape[0])
+        else:
+            perm = torch.as_tensor(rng.permutation(spikes.shape[0]), dtype=torch.long)
         spikes = spikes[perm]
     early = cfg.get('early_truncation', None)
     if early is not None:

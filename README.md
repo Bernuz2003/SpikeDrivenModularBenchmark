@@ -20,13 +20,33 @@ Framework modulare per la **Milestone 1** della tesi: valutazione quantitativa p
 
 ```bash
 cd milestone1_framework
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
-`torch`, `numpy`, `pyyaml`, `pandas` e `matplotlib` sono sufficienti per gli smoke test. `tonic` è opzionale per caricare dataset DVS reali.
+Alternativa equivalente:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pip install -e .
+```
+
+Per i dataset reali installare anche `tonic`:
+
+```bash
+python -m pip install -e ".[dev,datasets]"
+```
+
+oppure:
+
+```bash
+python -m pip install -r requirements-datasets.txt
+python -m pip install -e .
+```
+
+Se serve una build specifica di PyTorch per CUDA, installare prima PyTorch seguendo la versione CUDA del server e poi installare il progetto.
 
 ## Smoke test
 
@@ -39,6 +59,12 @@ Output atteso:
 ```text
 runs/milestone1/synthetic_smoke/
   config.yaml
+  config.json
+  dataset_split.json
+  environment.json
+  model_metadata.json
+  input_spike_profile.json
+  input_spike_density.csv
   metrics_layerwise.csv
   metrics_summary.json
   profile.json
@@ -67,6 +93,27 @@ python scripts/run_sweep.py --config-dir configs/milestone1/head_sweep
 python scripts/aggregate_reports.py --runs-dir runs/milestone1 --out-dir reports/milestone1
 ```
 
+Il report aggregato produce `summary.csv`, `pareto_front.csv`, grafici Pareto accuracy/costo e una decision table preliminare per Milestone 2.
+
+Per abilitare robustness e temporal sensitivity su una run, impostare:
+
+```yaml
+evaluation:
+  robustness:
+    enabled: true
+```
+
+La valutazione usa lo stesso checkpoint addestrato su dati puliti e misura event drop, temporal jitter, polarity drop, timestep shuffle ed early accuracy.
+
+Durante i run lunghi il training stampa un riepilogo a fine epoca e, se `training.log_interval_batches` è maggiore di zero, anche ogni N batch:
+
+```yaml
+training:
+  log_interval_batches: 25
+```
+
+Gli output sono flushati, quindi `screen -L` e `tail -f` li mostrano mentre il processo è in esecuzione.
+
 ## Dataset reali
 
 Per usare `CIFAR10-DVS` o `DVS128 Gesture`, installare `tonic` e impostare `dataset.root` nel file YAML:
@@ -74,10 +121,17 @@ Per usare `CIFAR10-DVS` o `DVS128 Gesture`, installare `tonic` e impostare `data
 ```yaml
 dataset:
   name: cifar10_dvs
-  root: /path/to/datasets
+  root: /path/to/datasets/tonic
 ```
 
-Il framework resta utilizzabile anche senza dataset reali tramite `synthetic_dvs`, utile per testare training loop, validator, logging e report.
+Config di partenza:
+
+```bash
+python -m m1_benchmark.training.train --config configs/milestone1/real/cifar10_dvs_smoke.yaml
+python -m m1_benchmark.training.train --config configs/milestone1/real/dvs128_gesture_smoke.yaml
+```
+
+Il framework resta utilizzabile anche senza dataset reali tramite `synthetic_dvs`, utile per testare training loop, validator, logging e report. Per la struttura consigliata dei dataset vedere `docs/DATASETS.md`.
 
 ## Principi implementati
 

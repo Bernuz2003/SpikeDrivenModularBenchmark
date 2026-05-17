@@ -1,26 +1,28 @@
 experiment:
-  name: m1_fe_hierarchical_tokenizer
+  name: cifar10_dvs_m1_diagnostic
   milestone: M1
   seed: 42
 
 dataset:
-  name: synthetic_dvs
-  height: 32
-  width: 32
+  name: cifar10_dvs
+  root: /path/to/datasets/tonic
+  height: 128
+  width: 128
   num_classes: 10
-  num_train: 96
-  num_val: 32
+  num_train: 2000
+  num_val: 500
 
 encoder:
   name: fixed_time_binary
   T: 8
   polarity_channels: true
   binarize: true
+  time_reference: sample_start
 
 model:
   feature_extractor:
-    name: hierarchical_tokenizer
-    channels: [8, 16, 32]
+    name: conv_bn_lif_maxpool
+    channels: [32, 64]
     residual: none
     output_format: tokens
   attention:
@@ -30,18 +32,27 @@ model:
     terminal_readout: true
 
 training:
-  epochs: 2
+  epochs: 5
   batch_size: 16
   optimizer: adamw
   lr: 0.001
   weight_decay: 0.0001
   surrogate_alpha: 4
-  profile_batches: 1
+  profile_batches: 2
   device: auto
-  num_workers: 0
+  num_workers: 2
+
+evaluation:
+  robustness:
+    enabled: true
+    event_drop_rates: [0.1, 0.2, 0.3]
+    temporal_jitter: [0.05]
+    polarity_drop: [0.2]
+    timestep_shuffle: true
+    early_accuracy: true
 
 logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: runs/milestone1/m1_fe_hierarchical_tokenizer
+  output_dir: runs/milestone1/cifar10_dvs_m1_diagnostic

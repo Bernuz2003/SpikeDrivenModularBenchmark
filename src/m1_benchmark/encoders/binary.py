@@ -7,6 +7,8 @@ from .base import EventEncoder
 
 class FixedTimeBinaryEncoder(EventEncoder):
     name = 'fixed_time_binary'
+    preserves_absolute_time = True
+    controls_event_count = False
 
     def encode_np(self, events: dict[str, Any]) -> np.ndarray:
         out = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint8)
@@ -19,6 +21,8 @@ class FixedTimeBinaryEncoder(EventEncoder):
 
 class FixedEventCountBinaryEncoder(EventEncoder):
     name = 'fixed_event_count_binary'
+    preserves_absolute_time = False
+    controls_event_count = True
 
     def encode_np(self, events: dict[str, Any]) -> np.ndarray:
         out = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint8)
@@ -37,14 +41,23 @@ class FixedEventCountBinaryEncoder(EventEncoder):
 
 class BinaryVoxelGridEncoder(FixedTimeBinaryEncoder):
     name = 'binary_voxel_grid'
+    preprocessing_cost = 'O(num_events + T*C*H*W) with polarity-aware binary voxel allocation'
 
 
 class TemporalSubsampleBinaryEncoder(EventEncoder):
     name = 'temporal_subsample_binary'
+    preserves_absolute_time = True
+    controls_event_count = False
+    preprocessing_cost = 'O(num_events + T_source*C*H*W)'
 
     def __init__(self, *args: Any, T_source: int | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.T_source = int(T_source or self.T * 2)
+
+    def describe(self) -> dict[str, Any]:
+        d = super().describe()
+        d['T_source'] = self.T_source
+        return d
 
     def encode_np(self, events: dict[str, Any]) -> np.ndarray:
         tmp = np.zeros((self.T_source, self.channels, self.height, self.width), dtype=np.uint8)

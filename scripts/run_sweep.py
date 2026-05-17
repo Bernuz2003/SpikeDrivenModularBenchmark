@@ -11,13 +11,20 @@ from m1_benchmark.training.train import run
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--config-dir', required=True)
+    ap.add_argument('--continue-on-error', action='store_true')
     args = ap.parse_args()
     cfgs = sorted(Path(args.config_dir).glob('*.yaml'))
     if not cfgs:
         raise SystemExit(f'No YAML configs found in {args.config_dir}')
     for cfg in cfgs:
         print(f'\n=== Running {cfg} ===')
-        run(cfg)
+        try:
+            run(cfg)
+        except Exception:
+            if not args.continue_on_error:
+                raise
+            import traceback
+            traceback.print_exc()
 
 if __name__ == '__main__':
     main()

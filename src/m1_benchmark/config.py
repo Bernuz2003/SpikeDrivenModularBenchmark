@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, MutableMapping
 import copy
-import os
+import json
 import subprocess
 import yaml
 
@@ -67,6 +66,17 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg['training'].setdefault('device', 'auto')
     cfg['training'].setdefault('surrogate_alpha', 4.0)
     cfg['training'].setdefault('profile_batches', 1)
+    cfg['training'].setdefault('resume_from', None)
+    cfg['training'].setdefault('log_interval_batches', 25)
+
+    cfg.setdefault('evaluation', {})
+    cfg['evaluation'].setdefault('robustness', {})
+    cfg['evaluation']['robustness'].setdefault('enabled', False)
+    cfg['evaluation']['robustness'].setdefault('event_drop_rates', [0.1, 0.2, 0.3])
+    cfg['evaluation']['robustness'].setdefault('temporal_jitter', [0.05])
+    cfg['evaluation']['robustness'].setdefault('polarity_drop', [0.2])
+    cfg['evaluation']['robustness'].setdefault('timestep_shuffle', True)
+    cfg['evaluation']['robustness'].setdefault('early_accuracy', True)
 
     cfg.setdefault('logging', {})
     cfg['logging'].setdefault('save_layer_metrics', True)
@@ -84,12 +94,40 @@ def get_git_commit() -> str | None:
         return None
 
 
+def get_git_metadata() -> dict[str, Any]:
+    """Return lightweight Git provenance for reproducibility artifacts."""
+    meta: dict[str, Any] = {
+        'commit': None,
+        'dirty': None,
+        'remote': None,
+        'branch': None,
+    }
+    try:
+        meta['commit'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL, text=True).strip()
+        meta['branch'] = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], stderr=subprocess.DEVNULL, text=True).strip()
+        status = subprocess.check_output(['git', 'status', '--short'], stderr=subprocess.DEVNULL, text=True)
+        meta['dirty'] = bool(status.strip())
+        remote = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], stderr=subprocess.DEVNULL, text=True).strip()
+        meta['remote'] = remote or None
+    except Exception:
+        pass
+    return meta
+
+
 def save_config(cfg: dict[str, Any], out_path: str | Path) -> None:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     clean = {k: v for k, v in cfg.items() if not k.startswith('_')}
     with out_path.open('w', encoding='utf-8') as f:
         yaml.safe_dump(clean, f, sort_keys=False, allow_unicode=True)
+
+
+def save_config_json(cfg: dict[str, Any], out_path: str | Path) -> None:
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    clean = {k: v for k, v in cfg.items() if not k.startswith('_')}
+    with out_path.open('w', encoding='utf-8') as f:
+        json.dump(clean, f, indent=2, ensure_ascii=False)
 
 
 def validate_milestone1_config(cfg: dict[str, Any]) -> None:
@@ -121,6 +159,14 @@ def validate_milestone1_config(cfg: dict[str, Any]) -> None:
     enc_name = enc.get('name', '')
     if 'count' in enc_name and enc.get('binarize', True) is not True:
         raise ConfigError("Count-valued encodings must be binarized before entering the hidden pipeline.")
+
+    output_format = fe.get('output_format', 'tokens')
+    if output_format not in ('tokens', 'feature_map'):
+        raise ConfigError(f"feature_extractor.output_format must be 'tokens' or 'feature_map', got {output_format!r}.")
+
+    head = cfg.get('model', {}).get('head', {})
+    if head.get('terminal_readout', True) is not True:
+        raise ConfigError("Milestone 1 requires head.terminal_readout=true; logits are allowed only at the terminal boundary.")
 
 
 def deep_update(base: MutableMapping[str, Any], patch: MutableMapping[str, Any]) -> MutableMapping[str, Any]:

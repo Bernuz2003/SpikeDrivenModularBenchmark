@@ -23,6 +23,9 @@ class LastTimestepSpikeReadout(nn.Module):
     terminal_readout = True
     track_metrics = True
     op_class = 'TerminalLinear'
+    uses_all_timesteps = False
+    produces_spikes_before_readout = True
+    accumulates_logits = False
 
     def __init__(self, in_dim: int, num_classes: int) -> None:
         super().__init__()
@@ -37,6 +40,9 @@ class TemporalSpikeVotingReadout(nn.Module):
     terminal_readout = True
     track_metrics = True
     op_class = 'TerminalLinearTemporalVoting'
+    uses_all_timesteps = True
+    produces_spikes_before_readout = True
+    accumulates_logits = True
 
     def __init__(self, in_dim: int, num_classes: int) -> None:
         super().__init__()
@@ -52,6 +58,9 @@ class SpatialPoolingThresholdHead(nn.Module):
     terminal_readout = True
     track_metrics = True
     op_class = 'TerminalLinearAfterThreshold'
+    uses_all_timesteps = True
+    produces_spikes_before_readout = True
+    accumulates_logits = False
 
     def __init__(self, in_dim: int, num_classes: int, surrogate_alpha: float = 4.0) -> None:
         super().__init__()
@@ -68,6 +77,9 @@ class ClassNeuronAccumulatorHead(nn.Module):
     terminal_readout = True
     track_metrics = True
     op_class = 'TerminalClassNeuronAccumulator'
+    uses_all_timesteps = True
+    produces_spikes_before_readout = False
+    accumulates_logits = True
 
     def __init__(self, in_dim: int, num_classes: int, beta: float = 0.5) -> None:
         super().__init__()
@@ -98,3 +110,19 @@ def build_head(cfg: dict[str, Any], in_dim: int, num_classes: int, surrogate_alp
     if name == 'class_neuron_accumulator':
         return ClassNeuronAccumulatorHead(in_dim, num_classes)
     raise ValueError(f'Unknown head: {name}')
+
+
+def describe_head(head: nn.Module, in_dim: int, num_classes: int) -> dict[str, Any]:
+    params = sum(p.numel() for p in head.parameters() if p.requires_grad)
+    return {
+        'name': head.__class__.__name__,
+        'op_class': getattr(head, 'op_class', head.__class__.__name__),
+        'terminal_readout': bool(getattr(head, 'terminal_readout', False)),
+        'uses_all_timesteps': bool(getattr(head, 'uses_all_timesteps', False)),
+        'produces_spikes_before_readout': bool(getattr(head, 'produces_spikes_before_readout', False)),
+        'accumulates_logits': bool(getattr(head, 'accumulates_logits', False)),
+        'input_feature_dim': int(in_dim),
+        'num_classes': int(num_classes),
+        'terminal_params': int(params),
+        'terminal_weight_mem_bits': int(params * 32),
+    }

@@ -1,5 +1,5 @@
 experiment:
-  name: m1_fe_hierarchical_tokenizer
+  name: m1_robustness_suite
   milestone: M1
   seed: 42
 
@@ -19,8 +19,8 @@ encoder:
 
 model:
   feature_extractor:
-    name: hierarchical_tokenizer
-    channels: [8, 16, 32]
+    name: conv_bn_lif_maxpool
+    channels: [8, 16]
     residual: none
     output_format: tokens
   attention:
@@ -40,8 +40,17 @@ training:
   device: auto
   num_workers: 0
 
+evaluation:
+  robustness:
+    enabled: true
+    event_drop_rates: [0.1, 0.2, 0.3]
+    temporal_jitter: [0.05]
+    polarity_drop: [0.2]
+    timestep_shuffle: true
+    early_accuracy: true
+
 logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: runs/milestone1/m1_fe_hierarchical_tokenizer
+  output_dir: runs/milestone1/m1_robustness_suite

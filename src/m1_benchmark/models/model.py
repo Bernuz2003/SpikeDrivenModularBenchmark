@@ -5,7 +5,7 @@ from torch import nn
 from m1_benchmark.training.utils import tensor_is_binary
 from .feature_extractors import build_feature_extractor
 from .attention import build_attention
-from .heads import build_head
+from .heads import build_head, describe_head
 
 
 class SpikeDrivenBenchmarkModel(nn.Module):
@@ -15,6 +15,7 @@ class SpikeDrivenBenchmarkModel(nn.Module):
         self.attention = attention
         self.head = head
         self.last_tokens_shape: tuple[int, ...] | None = None
+        self.metadata: dict = {}
 
     def forward(self, x: torch.Tensor, validate_hidden_binary: bool = False) -> torch.Tensor:
         z = self.feature_extractor(x)
@@ -52,5 +53,13 @@ def build_model(cfg: dict, encoder, device: torch.device) -> SpikeDrivenBenchmar
     fe = build_feature_extractor(cfg['model']['feature_extractor'], in_channels, surrogate_alpha=surrogate_alpha).to(device)
     head_dim, out_shape = infer_head_dim(fe, T, in_channels, h, w, device)
     att = build_attention(cfg['model']['attention']).to(device)
-    head = build_head(cfg['model']['head'], head_dim, int(cfg['dataset'].get('num_classes', 10)), surrogate_alpha=surrogate_alpha).to(device)
-    return SpikeDrivenBenchmarkModel(fe, att, head).to(device)
+    num_classes = int(cfg['dataset'].get('num_classes', 10))
+    head = build_head(cfg['model']['head'], head_dim, num_classes, surrogate_alpha=surrogate_alpha).to(device)
+    model = SpikeDrivenBenchmarkModel(fe, att, head).to(device)
+    model.metadata = {
+        'encoder': encoder.describe() if hasattr(encoder, 'describe') else {},
+        'feature_extractor': fe.describe() if hasattr(fe, 'describe') else {'output_shape': list(out_shape)},
+        'attention': {'name': cfg['model']['attention']['name'], 'params': 0, 'sops_proxy': 0, 'buffer_nxn': False},
+        'head': describe_head(head, head_dim, num_classes),
+    }
+    return model

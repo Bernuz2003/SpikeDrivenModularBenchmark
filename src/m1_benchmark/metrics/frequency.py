@@ -5,12 +5,19 @@ import torch
 
 
 def high_frequency_ratio(x: torch.Tensor, eps: float = 1e-12) -> float | None:
-    """Estimate high-frequency energy ratio for spike feature maps [B,T,C,H,W]."""
-    if x.dim() != 5:
+    """Estimate high-frequency energy ratio for feature maps or square token grids."""
+    if x.dim() == 5:
+        m = x.detach().float().mean(dim=(0, 1, 2)).cpu().numpy()
+    elif x.dim() == 4:
+        # Tokens [B,T,N,D]. If N is a square grid, recover a spatial map.
+        n = int(x.shape[2])
+        side = int(np.sqrt(n))
+        if side * side != n:
+            return None
+        m = x.detach().float().mean(dim=(0, 1, 3)).reshape(side, side).cpu().numpy()
+    else:
         return None
     with torch.no_grad():
-        # Mean over B,T,C -> [H,W]
-        m = x.detach().float().mean(dim=(0, 1, 2)).cpu().numpy()
         if min(m.shape) < 4:
             return None
         spec = np.fft.fftshift(np.fft.fft2(m))

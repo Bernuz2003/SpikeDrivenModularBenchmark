@@ -23,10 +23,24 @@ class FeatureExtractorBase(nn.Module):
 
 
 class StackedStages(FeatureExtractorBase):
-    def __init__(self, stages: list[nn.Module], output_format: str = 'tokens') -> None:
+    track_metrics = True
+    emits_hidden_spikes = True
+    op_class = 'FeatureExtractorOutput'
+
+    def __init__(
+        self,
+        stages: list[nn.Module],
+        output_format: str = 'tokens',
+        name: str = 'stacked_stages',
+        channels: list[int] | None = None,
+        residual: str | None = 'none',
+    ) -> None:
         super().__init__()
         self.stages = nn.ModuleList(stages)
         self.output_format = output_format
+        self.extractor_name = name
+        self.channels = channels or []
+        self.residual = residual or 'none'
         self.last_feature_shape: tuple[int, ...] | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -36,6 +50,28 @@ class StackedStages(FeatureExtractorBase):
         if self.output_format == 'tokens':
             return self._to_tokens(x)
         return x
+
+    def describe(self) -> dict[str, Any]:
+        feature_shape = list(self.last_feature_shape) if self.last_feature_shape else None
+        token_count = None
+        embedding_dim = None
+        if self.last_feature_shape is not None:
+            _, _, c, h, w = self.last_feature_shape
+            token_count = int(h * w)
+            embedding_dim = int(c)
+        primitive_stages = sum(1 for s in self.stages if getattr(s, 'op_class', '') != 'MSResidual')
+        return {
+            'name': self.extractor_name,
+            'num_stages': primitive_stages,
+            'channels': self.channels,
+            'downsampling_factor': 2 ** primitive_stages,
+            'output_format': self.output_format,
+            'feature_shape': feature_shape,
+            'token_count_N': token_count,
+            'embedding_dim_D': embedding_dim,
+            'uses_ms_residual': self.residual == 'ms',
+            'operators': sorted({getattr(s, 'op_class', s.__class__.__name__) for s in self.stages}),
+        }
 
 
 def _channels(cfg: dict[str, Any]) -> list[int]:
@@ -60,7 +96,7 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
             if residual == 'ms':
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'conv_bn_maxpool_lif':  # FE1
         for ch in channels:
@@ -68,7 +104,7 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
             if residual == 'ms':
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'lif_conv_bn_maxpool_lif':  # FE2
         for ch in channels:
@@ -76,7 +112,7 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
             if residual == 'ms':
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'depthwise_separable':  # FE3
         for ch in channels:
@@ -84,14 +120,14 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
             if residual == 'ms':
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'hierarchical_tokenizer':  # FE4
         # Explicitly hierarchical N↓, C↑; same primitive as FE1 for stable binarized downsampling.
         for ch in channels:
             stages.append(ConvBNMaxPoolLIFStage(prev, ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'resnet_local_ms':  # FE5
         if residual != 'ms':
@@ -102,7 +138,7 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
             for _ in range(num_blocks):
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
             prev = ch
-        return StackedStages(stages, output_format=output_format)
+        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'dual_path_high_frequency':  # FE6 optional
         return DualPathHighFrequencyExtractor(in_channels, channels, output_format=output_format, surrogate_alpha=surrogate_alpha)
@@ -130,7 +166,12 @@ class DualPathHighFrequencyExtractor(FeatureExtractorBase):
             prev = ch
         self.tail = nn.ModuleList(tail)
         self.output_format = output_format
+        self.channels = channels
         self.last_feature_shape = None
+        self.extractor_name = 'dual_path_high_frequency'
+        self.emits_hidden_spikes = True
+        self.track_metrics = True
+        self.op_class = 'DualPathHighFrequencyOutput'
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Membrane-level fusion; only thresholded spike is communicated.
@@ -139,3 +180,23 @@ class DualPathHighFrequencyExtractor(FeatureExtractorBase):
             x = stage(x)
         self.last_feature_shape = tuple(x.shape)
         return self._to_tokens(x) if self.output_format == 'tokens' else x
+
+    def describe(self) -> dict[str, Any]:
+        token_count = None
+        embedding_dim = None
+        if self.last_feature_shape is not None:
+            _, _, c, h, w = self.last_feature_shape
+            token_count = int(h * w)
+            embedding_dim = int(c)
+        return {
+            'name': self.extractor_name,
+            'num_stages': max(1, len(self.channels)),
+            'channels': self.channels,
+            'downsampling_factor': 2 ** max(1, len(self.channels)),
+            'output_format': self.output_format,
+            'feature_shape': list(self.last_feature_shape) if self.last_feature_shape else None,
+            'token_count_N': token_count,
+            'embedding_dim_D': embedding_dim,
+            'uses_ms_residual': False,
+            'operators': ['Conv-BN-MaxPool-LIF', 'SpikingDepthwiseSeparableConv', 'membrane_fusion_lif'],
+        }
