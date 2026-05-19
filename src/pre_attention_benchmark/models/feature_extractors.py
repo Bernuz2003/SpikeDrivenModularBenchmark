@@ -82,7 +82,7 @@ def _channels(cfg: dict[str, Any]) -> list[int]:
 
 def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alpha: float = 4.0) -> nn.Module:
     name = cfg.get('name', 'conv_bn_lif_maxpool')
-    channels = _channels(cfg)
+    channels = _channels(cfg)   # Canali di uscita dei vari stage, es. [16, 32]
     output_format = cfg.get('output_format', 'tokens')
     residual = cfg.get('residual', 'none')
 
@@ -90,14 +90,14 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
         raise ValueError(f'Only residual none/ms is allowed in pre-attention benchmark, got {residual!r}')
 
     stages: list[nn.Module] = []
-    prev = in_channels
+    prev = in_channels  # Canali in ingresso allo stage corrente
 
     if name == 'conv_bn_lif_maxpool':  # FE0
         for ch in channels:
             stages.append(ConvBNLIFMaxPoolStage(prev, ch, surrogate_alpha=surrogate_alpha))
             if residual == 'ms':
                 stages.append(MSResidualBlock(ch, surrogate_alpha=surrogate_alpha))
-            prev = ch
+            prev = ch   # Lo stage successivo riceve in input i canali appena prodotti
         return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
     if name == 'conv_bn_maxpool_lif':  # FE1

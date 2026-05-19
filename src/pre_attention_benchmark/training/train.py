@@ -95,27 +95,39 @@ def make_loader(ds, cfg: dict, shuffle: bool = False) -> DataLoader:
 
 
 def input_spike_profile(loader, max_batches: int = 4) -> dict:
+    '''
+    Profila gli spike di INPUT prodotti dall'encoder, prima che entrino nel modello.
+    Misura:
+    - quanti spike produce l'encoder;
+    - quanto è denso il tensore spike;
+    - come la densità spike è distribuita sui timestep.
+    '''
     total_spikes = 0.0
     total_numel = 0
     per_timestep_sum = None
     batches = 0
     samples = 0
     for spikes, _ in loader:
-        # Profilo dell'input prima del modello: aiuta a capire se un encoder e
-        # troppo denso o se svuota alcuni timestep.
+        # spikes è il tensore prodotto dall'encoder e caricato dal DataLoader 
+        # spikes.shape = [B, T, C, H, W]    ->   caso feature map
+        # spikes.shape = [B, T, N, D]       ->   caso token
         batches += 1
-        samples += int(spikes.shape[0])
-        total_spikes += float(spikes.sum().item())
-        total_numel += int(spikes.numel())
-        dens = spikes.float().mean(dim=tuple(i for i in range(spikes.dim()) if i != 1))
+        samples += int(spikes.shape[0])    # spikes.shape[0] = B, numero sample nel batch
+        total_spikes += float(spikes.sum().item())  # spike totali nel batch
+        total_numel += int(spikes.numel())   # elementi totali nel batch
+        # media su tutte le dimensioni TRANNE il tempo
+        # mean(dim=(0,2,3,4)) -> dens.shape = [T]
+        dens = spikes.float().mean(dim=tuple(i for i in range(spikes.dim()) if i != 1)) 
+        # accumulo densità per timestep sui batch
         per_timestep_sum = dens if per_timestep_sum is None else per_timestep_sum + dens
         if batches >= max_batches:
             break
     if batches == 0:
         return {'input_spike_count': 0, 'input_spike_density': 0, 'input_spike_density_per_timestep': [], 'profiled_samples': 0}
+    # media densità per timestep sui batch
     per_timestep = (per_timestep_sum / batches).cpu().tolist()
     return {
-        'input_spike_count': total_spikes / batches,
+        'input_spike_count': total_spikes / batches, # NOME FUORVIANTE! Si tratta di media spike per batch
         'input_spike_density': total_spikes / max(1, total_numel),
         'input_spike_density_per_timestep': [float(v) for v in per_timestep],
         'profiled_samples': samples,
