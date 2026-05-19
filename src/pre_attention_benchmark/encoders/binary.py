@@ -11,6 +11,10 @@ def _threshold_counts(counts: np.ndarray, pixel_threshold: int) -> np.ndarray:
 
 
 class FixedTimeBinaryEncoder(EventEncoder):
+    '''
+    Divide la durata temporale del sample in T intervalli temporali
+    e mette ogni evento nel bin temporale corrispondente.
+    '''
     name = 'fixed_time_binary'
     controls_event_count = False
 
@@ -19,12 +23,15 @@ class FixedTimeBinaryEncoder(EventEncoder):
         t, x, y, p = self._scale_xy(events)
         bins = self._time_bins(t)
         if bins.size:
-            # np.add.at gestisce correttamente collisioni multiple nello stesso voxel.
+            # np.add.at gestisce collisioni multiple nello stesso voxel.
             np.add.at(counts, (bins, p, y, x), 1)
         return _threshold_counts(counts, self.pixel_threshold)
 
 
 class FixedEventCountBinaryEncoder(EventEncoder):
+    '''
+    Divide la sequenza ordinata di eventi in T gruppi con circa lo stesso numero di eventi.
+    '''
     name = 'fixed_event_count_binary'
     controls_event_count = True
 
@@ -36,8 +43,8 @@ class FixedEventCountBinaryEncoder(EventEncoder):
             return _threshold_counts(counts, self.pixel_threshold)
         order = np.argsort(t)
         x, y, p = x[order], y[order], p[order]
-        # Equalizza il numero di eventi per timestep: perdiamo durata assoluta,
-        # ma controlliamo meglio la densita in input.
+        # Equalizza il numero di eventi per timestep => perdiamo durata assoluta,
+        # controlla meglio la densita in input
         chunks = np.array_split(np.arange(n), self.T)
         for ti, idx in enumerate(chunks):
             if idx.size:

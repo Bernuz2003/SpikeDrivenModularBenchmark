@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 from pre_attention_benchmark.config import load_config, validate_pre_attention_config, ConfigError
 from pre_attention_benchmark.datasets import CachedEncodedDataset, EncodedEventDataset, build_encoder
 from pre_attention_benchmark.metrics.collector import MetricsCollector
+from pre_attention_benchmark.models.heads import build_head, describe_head
 from pre_attention_benchmark.models.validators import validate_hidden_outputs
 
 
@@ -85,6 +86,39 @@ def test_cached_encoded_dataset_materializes_uint8_once():
     assert spikes.dtype == torch.float32
     assert label.item() == 1
     assert cached.cache_encoded is True
+
+
+def test_new_heads_forward_and_metadata():
+    token_x = torch.zeros(2, 3, 4, 5)
+    token_x[:, :, 0] = 1
+    avg_head = build_head({'name': 'spatio_temporal_avg_readout'}, 5, 7)
+    avg_logits = avg_head(token_x)
+    assert avg_logits.shape == (2, 7)
+    assert describe_head(avg_head, 5, 7)['readout_signal'] == 'firing_rate'
+
+    acc_head = build_head({'name': 'class_neuron_accumulator', 'threshold': 0.1}, 5, 7)
+    acc_logits = acc_head(token_x)
+    assert acc_logits.shape == (2, 7)
+    assert describe_head(acc_head, 5, 7)['uses_surrogate_class_threshold'] is True
+
+    map_x = torch.ones(2, 3, 5, 4, 4)
+    sv_head = build_head(
+        {'name': 'spikevision_spatial_pooling', 'threshold': 3.0},
+        5,
+        7,
+        feature_shape=(1, 3, 5, 4, 4),
+    )
+    sv_logits = sv_head(map_x)
+    assert sv_logits.shape == (2, 7)
+    assert describe_head(sv_head, 5, 7)['requires_feature_map'] is True
+
+
+def test_spikevision_head_requires_feature_map_config():
+    cfg = load_config(ROOT / 'configs/pre_attention_benchmark/head_sweep/spikevision_spatial_pooling.yaml')
+    validate_pre_attention_config(cfg)
+    cfg['model']['feature_extractor']['output_format'] = 'tokens'
+    with pytest.raises(ConfigError, match='spikevision_spatial_pooling requires'):
+        validate_pre_attention_config(cfg)
 
 
 def test_hidden_boundary_validator_catches_non_binary_output():

@@ -1,5 +1,5 @@
 experiment:
-  name: head_last_timestep_spike_readout
+  name: head_spatio_temporal_avg_readout
   benchmark: pre_attention
   seed: 42
 
@@ -30,7 +30,7 @@ model:
   attention:
     name: identity
   head:
-    name: last_timestep_spike_readout
+    name: spatio_temporal_avg_readout
     terminal_readout: true
 
 training:
@@ -51,4 +51,4 @@ logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_last_timestep_spike_readout
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_spatio_temporal_avg_readout

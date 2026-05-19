@@ -32,7 +32,7 @@ model:
   attention:
     name: identity
   head:
-    name: last_timestep_spike_readout
+    name: spatio_temporal_avg_readout
     terminal_readout: true
 
 training:

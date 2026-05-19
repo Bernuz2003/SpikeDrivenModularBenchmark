@@ -1,5 +1,5 @@
 experiment:
-  name: head_spatial_pooling_threshold
+  name: head_spikevision_spatial_pooling
   benchmark: pre_attention
   seed: 42
 
@@ -26,12 +26,14 @@ model:
     name: conv_bn_maxpool_lif
     channels: [16, 32]
     residual: none
-    output_format: tokens
+    output_format: feature_map
   attention:
     name: identity
   head:
-    name: spatial_pooling_threshold
+    name: spikevision_spatial_pooling
     terminal_readout: true
+    pool_regions: 1
+    threshold: 3.0
 
 training:
   epochs: 100
@@ -51,4 +53,4 @@ logging:
   save_layer_metrics: true
   save_frequency_metrics: true
   save_temporal_metrics: true
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_spatial_pooling_threshold
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_spikevision_spatial_pooling

@@ -10,7 +10,7 @@ Framework modulare per valutare componenti spike-driven prima dell'introduzione 
 - Cache encoded per run in memoria (`uint8`/`bool`), cosi lo stesso sample non viene ricodificato a ogni epoca.
 - Feature extractor spike-driven con varianti convolutional, residual MS, depthwise separable, hierarchical tokenizer e dual-path.
 - Attention forzata a `identity`, per misurare solo la qualita dei componenti pre-attention.
-- Head spike-driven con readout terminale esplicito.
+- Head terminali: spatio-temporal average, SpikeVision-like spatial pooling e class-neuron accumulator.
 - Metriche layer-wise: firing rate, spike count, burstiness, memory proxy, SOPs proxy, classi operative e high-frequency ratio.
 - Report run-level, aggregazione Pareto e decision table.
 - Test automatici sui validator e sulle parti eseguibili senza dataset esterni.
@@ -120,15 +120,5 @@ Il training stampa sempre un riepilogo a fine epoca. Per avere output periodico 
 
 ```yaml
 training:
-  log_interval_batches: 25
+  log_interval_batches: 50
 ```
-
-Le `print` sono flushate, quindi funzionano bene con `screen -L`, `tail -f` e log file su server remoti.
-
-## Principi
-
-1. La comunicazione hidden deve restare binaria: spike in `{0,1}`.
-2. L'attention rimane `identity`.
-3. I residual ammessi sono `none` e `ms`; `sew` fallisce.
-4. Gli encoding count-valued devono essere binarizzati.
-5. I logits real-valued sono ammessi solo nel readout terminale.

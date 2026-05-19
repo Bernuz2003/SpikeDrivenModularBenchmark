@@ -30,7 +30,7 @@ model:
   attention:
     name: identity
   head:
-    name: temporal_spike_voting
+    name: spatio_temporal_avg_readout
     terminal_readout: true
 
 training:

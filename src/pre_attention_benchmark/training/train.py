@@ -289,7 +289,7 @@ def run(config_path: str | Path) -> dict:
             optimizer,
             device,
             epoch=epoch,
-            log_interval_batches=int(cfg['training'].get('log_interval_batches', 25) or 0),
+            log_interval_batches=int(cfg['training'].get('log_interval_batches', 50) or 0),
         )
         val_loss, val_acc = evaluate(model, val_loader, device)
         if scheduler is not None:

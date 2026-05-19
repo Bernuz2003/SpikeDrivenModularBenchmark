@@ -58,7 +58,7 @@ def build_model(cfg: dict, encoder, device: torch.device) -> SpikeDrivenBenchmar
     head_dim, out_shape = infer_head_dim(fe, T, in_channels, h, w, device)
     att = build_attention(cfg['model']['attention']).to(device)
     num_classes = int(cfg['dataset'].get('num_classes', 10))
-    head = build_head(cfg['model']['head'], head_dim, num_classes, surrogate_alpha=surrogate_alpha).to(device)
+    head = build_head(cfg['model']['head'], head_dim, num_classes, surrogate_alpha=surrogate_alpha, feature_shape=out_shape).to(device)
     model = SpikeDrivenBenchmarkModel(fe, att, head).to(device)
     model.metadata = {
         'encoder': encoder.describe() if hasattr(encoder, 'describe') else {},

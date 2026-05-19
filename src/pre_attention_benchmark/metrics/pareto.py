@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def pareto_front(df: pd.DataFrame, acc_col: str = 'accuracy_top1', cost_cols: list[str] | None = None) -> pd.DataFrame:
-    cost_cols = cost_cols or ['total_sops_proxy', 'total_state_mem_bits', 'total_spike_count']
+    cost_cols = cost_cols or ['total_sops_proxy', 'max_state_mem_bits_per_sample', 'max_buffer_mem_bits']
     if df.empty:
         return df.copy()
     keep = []

@@ -97,7 +97,7 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg['model']['attention'].setdefault('name', 'identity')
 
     cfg['model'].setdefault('head', {})
-    cfg['model']['head'].setdefault('name', 'last_timestep_spike_readout')
+    cfg['model']['head'].setdefault('name', 'spatio_temporal_avg_readout')
     cfg['model']['head'].setdefault('terminal_readout', True)
 
     cfg.setdefault('training', {})
@@ -115,7 +115,7 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg['training'].setdefault('surrogate_alpha', 4.0)
     cfg['training'].setdefault('profile_batches', 1)
     cfg['training'].setdefault('resume_from', None)
-    cfg['training'].setdefault('log_interval_batches', 25)
+    cfg['training'].setdefault('log_interval_batches', 50)
 
     cfg.setdefault('evaluation', {})
     cfg['evaluation'].setdefault('robustness', {})
@@ -225,12 +225,18 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
         raise ConfigError("dataset.cache_dtype must be 'uint8' or 'bool'.")
 
     output_format = fe.get('output_format', 'tokens')
-    if output_format not in ('tokens', 'feature_map'):
+    if output_format not in ('tokens', 'feature_map', 'maps'):
         raise ConfigError(f"feature_extractor.output_format must be 'tokens' or 'feature_map', got {output_format!r}.")
 
     head = cfg.get('model', {}).get('head', {})
+    allowed_heads = {'spatio_temporal_avg_readout', 'spikevision_spatial_pooling', 'class_neuron_accumulator'}
+    head_name = head.get('name', '')
+    if head_name not in allowed_heads:
+        raise ConfigError(f"head.name must be one of {sorted(allowed_heads)}, got {head_name!r}.")
     if head.get('terminal_readout', True) is not True:
         raise ConfigError("pre-attention benchmark requires head.terminal_readout=true; logits are allowed only at the terminal boundary.")
+    if head_name == 'spikevision_spatial_pooling' and output_format not in ('feature_map', 'maps'):
+        raise ConfigError("spikevision_spatial_pooling requires feature_extractor.output_format='feature_map' or 'maps'.")
 
 
 def deep_update(base: MutableMapping[str, Any], patch: MutableMapping[str, Any]) -> MutableMapping[str, Any]:

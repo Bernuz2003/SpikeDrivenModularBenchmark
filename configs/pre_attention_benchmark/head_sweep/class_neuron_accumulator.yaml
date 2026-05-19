@@ -32,6 +32,11 @@ model:
   head:
     name: class_neuron_accumulator
     terminal_readout: true
+    beta: 0.5
+    threshold: 1.0
+    output_mode: spike_count
+    learn_beta: true
+    learn_threshold: true
 
 training:
   epochs: 100
