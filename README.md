@@ -6,7 +6,8 @@ Framework modulare per valutare componenti spike-driven prima dell'introduzione 
 
 - Interfaccia eventi uniforme: tempo, coordinate, polarita e label.
 - Supporto reale via `tonic` per `CIFAR10-DVS` e `DVS128 Gesture`.
-- Encoder binari: fixed time-bin, fixed event-count, binary voxel-grid e temporal subsampling.
+- Encoder binari: fixed time-bin e fixed event-count, con soglia configurabile su istogramma locale.
+- Cache encoded per run in memoria (`uint8`/`bool`), cosi lo stesso sample non viene ricodificato a ogni epoca.
 - Feature extractor spike-driven con varianti convolutional, residual MS, depthwise separable, hierarchical tokenizer e dual-path.
 - Attention forzata a `identity`, per misurare solo la qualita dei componenti pre-attention.
 - Head spike-driven con readout terminale esplicito.

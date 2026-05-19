@@ -5,7 +5,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from pre_attention_benchmark.config import load_config, validate_pre_attention_config, ConfigError
-from pre_attention_benchmark.datasets import build_encoder
+from pre_attention_benchmark.datasets import CachedEncodedDataset, EncodedEventDataset, build_encoder
 from pre_attention_benchmark.metrics.collector import MetricsCollector
 from pre_attention_benchmark.models.validators import validate_hidden_outputs
 
@@ -39,6 +39,52 @@ def test_encoder_outputs_binary_and_metadata():
     assert spikes.shape == (4, 2, 8, 8)
     assert set(spikes.unique().tolist()).issubset({0.0, 1.0})
     assert enc.describe()['controls_event_count'] is True
+
+
+def test_pixel_threshold_filters_local_event_counts():
+    enc = build_encoder(
+        {'name': 'fixed_time_binary', 'T': 1, 'binarize': True, 'pixel_threshold': 2},
+        {'height': 4, 'width': 4},
+    )
+    events = {
+        't': torch.arange(4).numpy(),
+        'x': torch.tensor([1, 1, 1, 2]).numpy(),
+        'y': torch.tensor([1, 1, 1, 2]).numpy(),
+        'p': torch.tensor([1, 1, 1, 1]).numpy(),
+        'label': 0,
+        'height': 4,
+        'width': 4,
+    }
+    spikes = enc(events)
+    assert spikes[0, 1, 1, 1] == 1
+    assert spikes[0, 1, 2, 2] == 0
+    assert enc.describe()['pixel_threshold'] == 2
+
+
+def test_cached_encoded_dataset_materializes_uint8_once():
+    class TinyRaw(torch.utils.data.Dataset):
+        def __len__(self):
+            return 2
+
+        def __getitem__(self, idx):
+            return {
+                't': torch.arange(3).numpy(),
+                'x': torch.tensor([idx, idx, idx]).numpy(),
+                'y': torch.tensor([0, 0, 0]).numpy(),
+                'p': torch.tensor([1, 1, 1]).numpy(),
+                'label': idx,
+                'height': 4,
+                'width': 4,
+            }
+
+    enc = build_encoder({'name': 'fixed_time_binary', 'T': 1, 'binarize': True}, {'height': 4, 'width': 4})
+    encoded = EncodedEventDataset(TinyRaw(), enc, split_name='train')
+    cached = CachedEncodedDataset.materialize(encoded, cache_dtype='uint8')
+    spikes, label = cached[1]
+    assert cached.spikes.dtype == torch.uint8
+    assert spikes.dtype == torch.float32
+    assert label.item() == 1
+    assert cached.cache_encoded is True
 
 
 def test_hidden_boundary_validator_catches_non_binary_output():

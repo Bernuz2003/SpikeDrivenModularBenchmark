@@ -11,6 +11,8 @@ dataset:
   num_classes: 10
   num_train: null
   num_val: null
+  cache_encoded: true
+  cache_dtype: uint8
   augmentations:
     early_truncation: 3
 
@@ -19,6 +21,7 @@ encoder:
   T: 6
   polarity_channels: true
   binarize: true
+  pixel_threshold: 3
 
 model:
   feature_extractor:

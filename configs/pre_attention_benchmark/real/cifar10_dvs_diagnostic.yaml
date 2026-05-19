@@ -11,13 +11,15 @@ dataset:
   num_classes: 10
   num_train: null
   num_val: null
+  cache_encoded: true
+  cache_dtype: uint8
 
 encoder:
   name: fixed_time_binary
   T: 8
   polarity_channels: true
   binarize: true
-  time_reference: sample_start
+  pixel_threshold: 3
 
 model:
   feature_extractor:

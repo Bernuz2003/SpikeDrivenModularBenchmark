@@ -76,12 +76,15 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg['dataset'].setdefault('num_classes', 10)
     cfg['dataset'].setdefault('num_train', 256)
     cfg['dataset'].setdefault('num_val', 64)
+    cfg['dataset'].setdefault('cache_encoded', True)
+    cfg['dataset'].setdefault('cache_dtype', 'uint8')
 
     cfg.setdefault('encoder', {})
     cfg['encoder'].setdefault('name', 'fixed_time_binary')
     cfg['encoder'].setdefault('T', 8)
     cfg['encoder'].setdefault('polarity_channels', True)
     cfg['encoder'].setdefault('binarize', True)
+    cfg['encoder'].setdefault('pixel_threshold', 0)
 
     cfg.setdefault('model', {})
     cfg['model'].setdefault('feature_extractor', {})
@@ -200,12 +203,26 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
         raise ConfigError("SEW residual is forbidden because it can propagate multi-bit spike sums.")
 
     enc = cfg.get('encoder', {})
+    allowed_encoders = {'fixed_time_binary', 'fixed_event_count_binary'}
+    enc_name = enc.get('name', '')
+    if enc_name not in allowed_encoders:
+        raise ConfigError(f"encoder.name must be one of {sorted(allowed_encoders)}, got {enc_name!r}.")
     if enc.get('binarize', True) is not True:
         raise ConfigError("pre-attention benchmark requires encoder.binarize=true for hidden spike-driven input.")
 
-    enc_name = enc.get('name', '')
     if 'count' in enc_name and enc.get('binarize', True) is not True:
         raise ConfigError("Count-valued encodings must be binarized before entering the hidden pipeline.")
+
+    try:
+        pixel_threshold = int(enc.get('pixel_threshold', 0))
+    except (TypeError, ValueError) as e:
+        raise ConfigError("encoder.pixel_threshold must be an integer >= 0.") from e
+    if pixel_threshold < 0:
+        raise ConfigError("encoder.pixel_threshold must be >= 0.")
+
+    cache_dtype = cfg.get('dataset', {}).get('cache_dtype', 'uint8')
+    if cache_dtype not in ('uint8', 'bool'):
+        raise ConfigError("dataset.cache_dtype must be 'uint8' or 'bool'.")
 
     output_format = fe.get('output_format', 'tokens')
     if output_format not in ('tokens', 'feature_map'):

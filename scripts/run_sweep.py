@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 import argparse
+import gc
 from pathlib import Path
 import sys
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,14 @@ def main():
                 raise
             import traceback
             traceback.print_exc()
+        finally:
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     main()

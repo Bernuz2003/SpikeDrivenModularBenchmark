@@ -5,33 +5,35 @@ import numpy as np
 from .base import EventEncoder
 
 
+def _threshold_counts(counts: np.ndarray, pixel_threshold: int) -> np.ndarray:
+    # Istogramma -> soglia -> spike. Con threshold 0 basta almeno un evento.
+    return (counts > int(pixel_threshold)).astype(np.uint8)
+
+
 class FixedTimeBinaryEncoder(EventEncoder):
     name = 'fixed_time_binary'
-    preserves_absolute_time = True
     controls_event_count = False
 
     def encode_np(self, events: dict[str, Any]) -> np.ndarray:
-        out = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint8)
+        counts = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint32)
         t, x, y, p = self._scale_xy(events)
         bins = self._time_bins(t)
         if bins.size:
-            # Collisioni nello stesso voxel restano 1: qui conta l'attivazione,
-            # non il numero di eventi accumulati.
-            out[bins, p, y, x] = 1
-        return out
+            # np.add.at gestisce correttamente collisioni multiple nello stesso voxel.
+            np.add.at(counts, (bins, p, y, x), 1)
+        return _threshold_counts(counts, self.pixel_threshold)
 
 
 class FixedEventCountBinaryEncoder(EventEncoder):
     name = 'fixed_event_count_binary'
-    preserves_absolute_time = False
     controls_event_count = True
 
     def encode_np(self, events: dict[str, Any]) -> np.ndarray:
-        out = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint8)
+        counts = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint32)
         t, x, y, p = self._scale_xy(events)
         n = t.size
         if n == 0:
-            return out
+            return _threshold_counts(counts, self.pixel_threshold)
         order = np.argsort(t)
         x, y, p = x[order], y[order], p[order]
         # Equalizza il numero di eventi per timestep: perdiamo durata assoluta,
@@ -39,40 +41,5 @@ class FixedEventCountBinaryEncoder(EventEncoder):
         chunks = np.array_split(np.arange(n), self.T)
         for ti, idx in enumerate(chunks):
             if idx.size:
-                out[ti, p[idx], y[idx], x[idx]] = 1
-        return out
-
-
-class BinaryVoxelGridEncoder(FixedTimeBinaryEncoder):
-    name = 'binary_voxel_grid'
-    preprocessing_cost = 'O(num_events + T*C*H*W) with polarity-aware binary voxel allocation'
-
-
-class TemporalSubsampleBinaryEncoder(EventEncoder):
-    name = 'temporal_subsample_binary'
-    preserves_absolute_time = True
-    controls_event_count = False
-    preprocessing_cost = 'O(num_events + T_source*C*H*W)'
-
-    def __init__(self, *args: Any, T_source: int | None = None, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.T_source = int(T_source or self.T * 2)
-
-    def describe(self) -> dict[str, Any]:
-        d = super().describe()
-        d['T_source'] = self.T_source
-        return d
-
-    def encode_np(self, events: dict[str, Any]) -> np.ndarray:
-        tmp = np.zeros((self.T_source, self.channels, self.height, self.width), dtype=np.uint8)
-        t, x, y, p = self._scale_xy(events)
-        bins = self._time_bins(t, T=self.T_source)
-        if bins.size:
-            tmp[bins, p, y, x] = 1
-        # Max-pooling temporale tra bin sorgente: resta binario e non somma spike.
-        groups = np.array_split(np.arange(self.T_source), self.T)
-        out = np.zeros((self.T, self.channels, self.height, self.width), dtype=np.uint8)
-        for ti, idx in enumerate(groups):
-            if idx.size:
-                out[ti] = tmp[idx].max(axis=0)
-        return out
+                np.add.at(counts[ti], (p[idx], y[idx], x[idx]), 1)
+        return _threshold_counts(counts, self.pixel_threshold)

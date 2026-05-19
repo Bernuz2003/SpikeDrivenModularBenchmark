@@ -175,7 +175,13 @@ def evaluate_robustness(model, cfg: dict, device: torch.device, clean_acc: float
         print(f"robustness_eval={name} augmentations={aug}", flush=True)
         # La robustezza riusa i pesi addestrati su dati puliti e cambia solo la
         # validation: cosi misuriamo degradazione, non un nuovo training.
-        _, val_ds, _ = build_datasets(cfg, train_augmentations_override={}, val_augmentations_override=aug)
+        _, val_ds, _ = build_datasets(
+            cfg,
+            train_augmentations_override={},
+            val_augmentations_override=aug,
+            cache_train=False,
+            cache_val=True,
+        )
         val_loader = make_loader(val_ds, cfg, shuffle=False)
         loss, acc = evaluate(model, val_loader, device)
         drop = float(clean_acc - acc)

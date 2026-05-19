@@ -9,8 +9,6 @@ from pre_attention_benchmark.encoders.augmentations import apply_event_augmentat
 from pre_attention_benchmark.encoders.binary import (
     FixedTimeBinaryEncoder,
     FixedEventCountBinaryEncoder,
-    BinaryVoxelGridEncoder,
-    TemporalSubsampleBinaryEncoder,
 )
 
 
@@ -46,6 +44,56 @@ class EncodedEventDataset(Dataset):
         return spikes, torch.tensor(label, dtype=torch.long)
 
 
+class CachedEncodedDataset(Dataset):
+    def __init__(
+        self,
+        spikes: torch.Tensor,
+        labels: torch.Tensor,
+        source: EncodedEventDataset,
+        cache_dtype: str,
+    ) -> None:
+        self.spikes = spikes
+        self.labels = labels
+        self.split_name = source.split_name
+        self.split_indices = source.split_indices
+        self.augmentations = source.augmentations
+        self.seed = source.seed
+        self.cache_encoded = True
+        self.cache_dtype = cache_dtype
+        self.cache_num_bytes = int(self.spikes.numel() * self.spikes.element_size() + self.labels.numel() * self.labels.element_size())
+
+    def __len__(self) -> int:
+        return int(self.labels.numel())
+
+    def __getitem__(self, idx: int):
+        # La cache resta compatta; il modello riceve float32 come prima.
+        return self.spikes[idx].to(torch.float32), self.labels[idx]
+
+    @classmethod
+    def materialize(cls, ds: EncodedEventDataset, cache_dtype: str = 'uint8') -> 'CachedEncodedDataset':
+        if cache_dtype not in {'uint8', 'bool'}:
+            raise ValueError(f"dataset.cache_dtype must be 'uint8' or 'bool', got {cache_dtype!r}.")
+        if len(ds) == 0:
+            raise ValueError('Cannot materialize an empty encoded dataset.')
+        torch_dtype = torch.uint8 if cache_dtype == 'uint8' else torch.bool
+        print(f"cache_encoded=materialize split={ds.split_name} samples={len(ds)} dtype={cache_dtype}", flush=True)
+        first_spikes, first_label = ds[0]
+        # Preallocazione esplicita: evita il picco di memoria dovuto a una lista
+        # di tensori piu lo stack finale, che sui dataset reali diventa pesante.
+        spikes = torch.empty((len(ds), *first_spikes.shape), dtype=torch_dtype)
+        labels = torch.empty((len(ds),), dtype=torch.long)
+        spikes[0] = (first_spikes > 0).to(torch_dtype).cpu()
+        labels[0] = first_label.to(torch.long).cpu()
+        log_every = max(1, len(ds) // 10)
+        for idx in range(1, len(ds)):
+            sample_spikes, label = ds[idx]
+            spikes[idx] = (sample_spikes > 0).to(torch_dtype).cpu()
+            labels[idx] = label.to(torch.long).cpu()
+            if (idx + 1) % log_every == 0 or idx + 1 == len(ds):
+                print(f"cache_encoded=progress split={ds.split_name} encoded={idx + 1}/{len(ds)}", flush=True)
+        return cls(spikes, labels, ds, cache_dtype)
+
+
 def build_encoder(cfg: dict[str, Any], dataset_cfg: dict[str, Any]):
     name = cfg.get('name', 'fixed_time_binary')
     # Le dimensioni arrivano dal dataset, non dall'encoder: evita config incoerenti
@@ -58,17 +106,12 @@ def build_encoder(cfg: dict[str, Any], dataset_cfg: dict[str, Any]):
         width=w,
         polarity_channels=cfg.get('polarity_channels', True),
         binarize=cfg.get('binarize', True),
-        duration_us=cfg.get('duration_us', dataset_cfg.get('duration_us')),
-        time_reference=cfg.get('time_reference', dataset_cfg.get('time_reference', 'sample_start')),
+        pixel_threshold=cfg.get('pixel_threshold', 0),
     )
     if name == 'fixed_time_binary':
         return FixedTimeBinaryEncoder(**common)
     if name == 'fixed_event_count_binary':
         return FixedEventCountBinaryEncoder(**common)
-    if name == 'binary_voxel_grid':
-        return BinaryVoxelGridEncoder(**common)
-    if name == 'temporal_subsample_binary':
-        return TemporalSubsampleBinaryEncoder(**common, T_source=cfg.get('T_source'))
     raise ValueError(f'Unknown encoder: {name}')
 
 
@@ -95,6 +138,8 @@ def build_datasets(
     cfg: dict[str, Any],
     train_augmentations_override: dict[str, Any] | None = None,
     val_augmentations_override: dict[str, Any] | None = None,
+    cache_train: bool = True,
+    cache_val: bool = True,
 ):
     dataset_cfg = cfg['dataset']
     enc = build_encoder(cfg['encoder'], dataset_cfg)
@@ -145,16 +190,25 @@ def build_datasets(
 
     train_ds = EncodedEventDataset(train_events, enc, augmentations=train_aug, seed=seed, split_name='train', split_indices=train_indices)
     val_ds = EncodedEventDataset(val_events, enc, augmentations=val_aug, seed=seed + 1, split_name='val', split_indices=val_indices)
+    if dataset_cfg.get('cache_encoded', False):
+        cache_dtype = str(dataset_cfg.get('cache_dtype', 'uint8'))
+        if cache_train:
+            train_ds = CachedEncodedDataset.materialize(train_ds, cache_dtype=cache_dtype)
+        if cache_val:
+            val_ds = CachedEncodedDataset.materialize(val_ds, cache_dtype=cache_dtype)
     return train_ds, val_ds, enc
 
 
-def dataset_metadata(train_ds: EncodedEventDataset, val_ds: EncodedEventDataset, encoder) -> dict[str, Any]:
-    def split(ds: EncodedEventDataset) -> dict[str, Any]:
+def dataset_metadata(train_ds: Dataset, val_ds: Dataset, encoder) -> dict[str, Any]:
+    def split(ds: Dataset) -> dict[str, Any]:
         return {
             'name': ds.split_name,
             'num_samples': len(ds),
             'indices': ds.split_indices,
             'augmentations': ds.augmentations,
+            'cache_encoded': bool(getattr(ds, 'cache_encoded', False)),
+            'cache_dtype': getattr(ds, 'cache_dtype', None),
+            'cache_num_bytes': getattr(ds, 'cache_num_bytes', None),
         }
 
     return {

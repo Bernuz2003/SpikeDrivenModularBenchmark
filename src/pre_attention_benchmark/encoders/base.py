@@ -9,7 +9,6 @@ import torch
 class EventEncoder(ABC):
     name: str = 'base'
 
-    preserves_absolute_time: bool = False
     controls_event_count: bool = False
     preprocessing_cost: str = 'O(num_events)'
 
@@ -20,19 +19,18 @@ class EventEncoder(ABC):
         width: int,
         polarity_channels: bool = True,
         binarize: bool = True,
-        duration_us: float | None = None,
-        time_reference: str = 'sample_start',
-        **kwargs: Any,
+        pixel_threshold: int = 0,
     ) -> None:
         self.T = int(T)
         self.height = int(height)
         self.width = int(width)
         self.polarity_channels = bool(polarity_channels)
         self.binarize = bool(binarize)
-        self.duration_us = float(duration_us) if duration_us is not None else None
-        self.time_reference = str(time_reference)
+        self.pixel_threshold = int(pixel_threshold)
         if not self.binarize:
             raise ValueError('pre-attention benchmark encoders must produce binary spikes; set binarize=true.')
+        if self.pixel_threshold < 0:
+            raise ValueError('encoder.pixel_threshold must be >= 0.')
 
     @property
     def channels(self) -> int:
@@ -44,8 +42,7 @@ class EventEncoder(ABC):
 
     def __call__(self, events: dict[str, Any]) -> torch.Tensor:
         arr = self.encode_np(events)
-        # Anche gli encoder count-based rientrano qui: oltre questa soglia passa
-        # solo spike binario, mai conteggi multi-bit.
+        # encode_np dovrebbe gia restituire uint8 binario.
         arr = (arr > 0).astype(np.float32)
         return torch.from_numpy(arr)
 
@@ -57,29 +54,38 @@ class EventEncoder(ABC):
             'width': self.width,
             'channels': self.channels,
             'binarize': self.binarize,
+            'pixel_threshold': self.pixel_threshold,
             'output_shape': [self.T, self.channels, self.height, self.width],
-            'preserves_absolute_time': bool(self.preserves_absolute_time and self.duration_us is not None),
             'controls_event_count': bool(self.controls_event_count),
             'preprocessing_cost': self.preprocessing_cost,
-            'duration_us': self.duration_us,
-            'time_reference': self.time_reference,
         }
 
     def _scale_xy(self, events: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        # ogni indice i rappresenta un evento
+        # e_i = (t[i], x[i], y[i], p[i])
         x = np.asarray(events['x'], dtype=np.int64)
         y = np.asarray(events['y'], dtype=np.int64)
         p = np.asarray(events['p'], dtype=np.int64)
         t = np.asarray(events['t'])
         src_h = int(events.get('height', self.height))
         src_w = int(events.get('width', self.width))
+
         # Ridimensionamento nearest-neighbor sugli indirizzi eventi; e grezzo ma
         # riproducibile, e non introduce interpolazioni dense.
         if src_w != self.width and src_w > 0:
             x = np.floor(x.astype(np.float64) * self.width / src_w).astype(np.int64)
         if src_h != self.height and src_h > 0:
             y = np.floor(y.astype(np.float64) * self.height / src_h).astype(np.int64)
+
+        # ogni evento cada dentro la griglia target [H, W]
         x = np.clip(x, 0, self.width - 1)
         y = np.clip(y, 0, self.height - 1)
+
+        # Se polarity_channels=True => p = 0/1
+        #   output encoder: [T, 2, H, W]
+
+        # Se polarity_channels=False => tutte le polarità collassano nel canale 0
+        #   output encoder: [T, 1, H, W]
         if self.polarity_channels:
             p = (p > 0).astype(np.int64)
         else:
@@ -87,19 +93,25 @@ class EventEncoder(ABC):
         return t, x, y, p
 
     def _time_bins(self, t: np.ndarray, T: int | None = None) -> np.ndarray:
+        '''
+        Restituisce, per ogni evento, il timestep discreto in cui deve cadere.
+        Input:
+          t.shape = [num_events]
+        Output:
+          bins.shape = [num_events], con valori in {0, ..., T-1}
+        '''
         T = int(T or self.T)
         if t.size == 0:
             return np.zeros(0, dtype=np.int64)
         t = t.astype(np.float64)
-        if self.duration_us is not None and self.duration_us > 0:
-            # Quando duration_us e fissato, ogni sample usa la stessa scala
-            # temporale: utile per confrontare densita tra run diverse.
-            t0 = float(t.min()) if self.time_reference == 'sample_start' else 0.0
-            bins = np.floor((t - t0) / (self.duration_us + 1e-12) * T).astype(np.int64)
-            return np.clip(bins, 0, T - 1)
+
+        # Ogni sample viene stirato/compresso tra il primo e l'ultimo evento:
+        # preserviamo l'ordine temporale relativo, non la durata fisica assoluta.
         t_min = float(t.min())
         t_max = float(t.max())
         if t_max <= t_min:
             return np.zeros_like(t, dtype=np.int64)
+
+        # Mappa [t_min, t_max] -> preserva ordine temporale relativo, non durata assoluta
         bins = np.floor((t - t_min) / (t_max - t_min + 1e-12) * T).astype(np.int64)
         return np.clip(bins, 0, T - 1)
