@@ -33,7 +33,7 @@ model:
     name: spatio_temporal_avg_readout
 
 training:
-  epochs: 100
+  epochs: 60
   batch_size: 16
   optimizer: adamw
   lr: 0.001
