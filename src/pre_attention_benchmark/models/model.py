@@ -63,7 +63,7 @@ def build_model(cfg: dict, encoder, device: torch.device) -> SpikeDrivenBenchmar
     model.metadata = {
         'encoder': encoder.describe() if hasattr(encoder, 'describe') else {},
         'feature_extractor': fe.describe() if hasattr(fe, 'describe') else {'output_shape': list(out_shape)},
-        'attention': {'name': cfg['model']['attention']['name'], 'params': 0, 'sops_proxy': 0, 'buffer_nxn': False},
+        'attention': {'name': cfg['model']['attention']['name'], 'params': 0},
         'head': describe_head(head, head_dim, num_classes),
     }
     return model

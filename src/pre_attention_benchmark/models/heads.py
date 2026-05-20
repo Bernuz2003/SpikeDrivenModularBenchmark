@@ -43,10 +43,6 @@ class StatelessThreshold(nn.Module):
     Serve per sogliare una proiezione terminale senza introdurre uno stato LIF.
     """
 
-    track_metrics = True
-    op_class = 'StatelessSurrogateThreshold'
-    requires_state = False
-
     def __init__(self, threshold: float = 1.0, surrogate_alpha: float = 4.0, name: str = 'stateless_threshold') -> None:
         super().__init__()
         self.register_buffer('threshold', torch.tensor(float(threshold)))
@@ -59,25 +55,15 @@ class StatelessThreshold(nn.Module):
 
 
 class SpatioTemporalAvgReadout(nn.Module):
-    terminal_readout = True
-    track_metrics = True
-    op_class = 'TerminalSpatioTemporalAvgFC'
-    uses_all_timesteps = True
-    produces_spikes_before_readout = False
-    accumulates_logits = False
-    accumulates_spikes = False
-
     def __init__(self, in_dim: int, num_classes: int) -> None:
         super().__init__()
         self.fc = nn.Linear(in_dim, num_classes)
         self.last_pooled_shape: tuple[int, ...] | None = None
-        self.last_reduction_ops = 0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         pooled_t = spatial_average_per_timestep(x)  # [B,T,D]
         pooled = pooled_t.mean(dim=1)  # [B,D]
         self.last_pooled_shape = tuple(pooled.shape)
-        self.last_reduction_ops = int(x.numel())
         return self.fc(pooled)
 
     def describe(self) -> dict[str, Any]:
@@ -88,15 +74,6 @@ class SpatioTemporalAvgReadout(nn.Module):
 
 
 class SpikeVisionSpatialPoolingHead(nn.Module):
-    terminal_readout = True
-    track_metrics = True
-    op_class = 'TerminalSpikeVisionSpatialPooling'
-    uses_all_timesteps = True
-    produces_spikes_before_readout = True
-    accumulates_logits = False
-    accumulates_spikes = False
-    requires_feature_map = True
-
     def __init__(
         self,
         in_channels: int,
@@ -126,7 +103,6 @@ class SpikeVisionSpatialPoolingHead(nn.Module):
         self.threshold = StatelessThreshold(threshold=threshold, surrogate_alpha=surrogate_alpha, name='spikevision_spatial_threshold')
         self.fc = nn.Linear(self.in_channels * self.pool_regions, num_classes)
         self.last_threshold_shape: tuple[int, ...] | None = None
-        self.last_reduction_ops = 0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() != 5:
@@ -146,7 +122,6 @@ class SpikeVisionSpatialPoolingHead(nn.Module):
         self.last_threshold_shape = tuple(spk.shape)
         # Dopo il threshold torna binario; la media temporale e terminale.
         features = spk.flatten(2).mean(dim=1)
-        self.last_reduction_ops = int(spk.numel())
         return self.fc(features)
 
     def describe(self) -> dict[str, Any]:
@@ -161,14 +136,6 @@ class SpikeVisionSpatialPoolingHead(nn.Module):
 
 
 class ClassNeuronAccumulatorHead(nn.Module):
-    terminal_readout = True
-    track_metrics = True
-    op_class = 'TerminalClassNeuronAccumulator'
-    uses_all_timesteps = True
-    produces_spikes_before_readout = True
-    accumulates_logits = False
-    accumulates_spikes = True
-
     def __init__(
         self,
         in_dim: int,
@@ -200,8 +167,6 @@ class ClassNeuronAccumulatorHead(nn.Module):
             self.threshold_raw = nn.Parameter(torch.tensor(math.log(math.exp(float(threshold)) - 1.0)))
         else:
             self.register_buffer('threshold_value', torch.tensor(float(threshold)))
-        self.last_state_shape: tuple[int, ...] | None = None
-        self.last_class_spike_shape: tuple[int, ...] | None = None
 
     def _beta(self, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
         if self.learn_beta:
@@ -220,7 +185,6 @@ class ClassNeuronAccumulatorHead(nn.Module):
         threshold = self._threshold(currents.dtype, currents.device)
         mem = torch.zeros_like(currents[:, 0])
         spike_count = torch.zeros_like(mem)
-        class_spikes = []
         for ti in range(currents.shape[1]):
             # Neuroni di classe terminali: accumulano correnti real-valued e
             # producono spike con surrogate gradient, senza mescolare mem e count.
@@ -228,9 +192,6 @@ class ClassNeuronAccumulatorHead(nn.Module):
             spk = spike_fn(mem - threshold, self.surrogate_alpha)
             spike_count = spike_count + spk
             mem = mem * (1.0 - spk)
-            class_spikes.append(spk)
-        self.last_state_shape = tuple(mem.shape)
-        self.last_class_spike_shape = tuple(torch.stack(class_spikes, dim=1).shape)
         if self.output_mode == 'firing_rate':
             return spike_count / max(1, int(currents.shape[1]))
         return spike_count
@@ -289,17 +250,9 @@ def describe_head(head: nn.Module, in_dim: int, num_classes: int) -> dict[str, A
     params = sum(p.numel() for p in head.parameters() if p.requires_grad)
     meta = {
         'name': head.__class__.__name__,
-        'op_class': getattr(head, 'op_class', head.__class__.__name__),
-        'terminal_readout': bool(getattr(head, 'terminal_readout', False)),
-        'track_metrics': bool(getattr(head, 'track_metrics', False)),
-        'uses_all_timesteps': bool(getattr(head, 'uses_all_timesteps', False)),
-        'produces_spikes_before_readout': bool(getattr(head, 'produces_spikes_before_readout', False)),
-        'accumulates_logits': bool(getattr(head, 'accumulates_logits', False)),
-        'accumulates_spikes': bool(getattr(head, 'accumulates_spikes', False)),
         'input_feature_dim': int(in_dim),
         'num_classes': int(num_classes),
         'terminal_params': int(params),
-        'terminal_weight_mem_bits': int(params * 32),
     }
     if hasattr(head, 'describe'):
         meta.update(head.describe())

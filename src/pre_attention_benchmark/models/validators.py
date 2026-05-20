@@ -5,6 +5,17 @@ from .attention import IdentityAttention
 from pre_attention_benchmark.training.utils import tensor_is_binary
 
 
+HIDDEN_BOUNDARY_CLASS_NAMES = {
+    'ConvBNLIFMaxPoolStage',
+    'ConvBNMaxPoolLIFStage',
+    'LIFConvBNMaxPoolLIFStage',
+    'DepthwiseSeparableStage',
+    'MSResidualBlock',
+    'StackedStages',
+    'DualPathHighFrequencyExtractor',
+}
+
+
 def validate_model_static(model: torch.nn.Module) -> None:
     att = getattr(model, 'attention', None)
     if not isinstance(att, IdentityAttention):
@@ -28,10 +39,8 @@ def validate_hidden_outputs(model, sample: torch.Tensor, device: torch.device) -
                 violations.append(f'{name} emitted non-binary hidden output with shape {tuple(out.shape)}')
         return fn
 
-    for name, module in model.named_modules():
-        if getattr(module, 'emits_hidden_spikes', False):
-            # Solo i moduli che dichiarano un confine hidden sono controllati qui;
-            # i layer interni possono avere correnti real-valued.
+    for name, module in iter_hidden_spike_boundaries(model):
+        if name:
             handles.append(module.register_forward_hook(hook(name)))
 
     with torch.no_grad():
@@ -49,3 +58,12 @@ def validate_hidden_outputs(model, sample: torch.Tensor, device: torch.device) -
         joined = '; '.join(violations[:5])
         more = '' if len(violations) <= 5 else f'; ... {len(violations) - 5} more'
         raise RuntimeError(f'Hidden spike communication violated: {joined}{more}')
+
+
+def iter_hidden_spike_boundaries(model: torch.nn.Module):
+    for name, module in model.named_modules():
+        if name in {'feature_extractor', 'attention'}:
+            yield name, module
+            continue
+        if module.__class__.__name__ in HIDDEN_BOUNDARY_CLASS_NAMES:
+            yield name, module

@@ -4,9 +4,6 @@ from torch import nn
 
 
 class IdentityAttention(nn.Module):
-    track_metrics = True
-    op_class = 'Identity'
-
     def forward(self, x):
         return x
 

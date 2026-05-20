@@ -98,7 +98,6 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
 
     cfg['model'].setdefault('head', {})
     cfg['model']['head'].setdefault('name', 'spatio_temporal_avg_readout')
-    cfg['model']['head'].setdefault('terminal_readout', True)
 
     cfg.setdefault('training', {})
     cfg['training'].setdefault('epochs', 2)
@@ -127,9 +126,6 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg['evaluation']['robustness'].setdefault('early_accuracy', True)
 
     cfg.setdefault('logging', {})
-    cfg['logging'].setdefault('save_layer_metrics', True)
-    cfg['logging'].setdefault('save_frequency_metrics', True)
-    cfg['logging'].setdefault('save_temporal_metrics', True)
     cfg['logging'].setdefault('output_dir', f"runs/pre_attention_benchmark/{cfg['experiment']['name']}")
     return cfg
 
@@ -233,8 +229,6 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
     head_name = head.get('name', '')
     if head_name not in allowed_heads:
         raise ConfigError(f"head.name must be one of {sorted(allowed_heads)}, got {head_name!r}.")
-    if head.get('terminal_readout', True) is not True:
-        raise ConfigError("pre-attention benchmark requires head.terminal_readout=true; logits are allowed only at the terminal boundary.")
     if head_name == 'spikevision_spatial_pooling' and output_format not in ('feature_map', 'maps'):
         raise ConfigError("spikevision_spatial_pooling requires feature_extractor.output_format='feature_map' or 'maps'.")
 

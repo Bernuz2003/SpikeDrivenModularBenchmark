@@ -31,7 +31,6 @@ model:
     name: identity
   head:
     name: class_neuron_accumulator
-    terminal_readout: true
     beta: 0.5
     threshold: 1.0
     output_mode: spike_count
@@ -53,7 +52,4 @@ training:
   num_workers: 4
 
 logging:
-  save_layer_metrics: true
-  save_frequency_metrics: true
-  save_temporal_metrics: true
   output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_class_neuron_accumulator

@@ -31,7 +31,6 @@ model:
     name: identity
   head:
     name: spatio_temporal_avg_readout
-    terminal_readout: true
 
 training:
   epochs: 100
@@ -48,7 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  save_layer_metrics: true
-  save_frequency_metrics: true
-  save_temporal_metrics: true
   output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/enc_fixed_time_binary_T4

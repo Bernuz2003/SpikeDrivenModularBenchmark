@@ -45,13 +45,9 @@ class ConvBN(nn.Module):
 
 
 class TDMaxPool(nn.Module):
-    track_metrics = True
-    op_class = 'MaxPoolCompare'
-
     def __init__(self, kernel_size: int = 2, stride: int = 2) -> None:
         super().__init__()
         self.pool = nn.MaxPool2d(kernel_size=kernel_size, stride=stride)
-        self.pool._pre_attention_skip_metrics = True
         self.kernel_size = kernel_size
         self.stride = stride
 
@@ -62,9 +58,6 @@ class TDMaxPool(nn.Module):
 
 
 class ConvBNLIFMaxPoolStage(nn.Module):
-    emits_hidden_spikes = True
-    op_class = 'Conv-BN-LIF-MaxPool'
-
     def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
         super().__init__()
         self.convbn = ConvBN(in_ch, out_ch)
@@ -76,9 +69,6 @@ class ConvBNLIFMaxPoolStage(nn.Module):
 
 
 class ConvBNMaxPoolLIFStage(nn.Module):
-    emits_hidden_spikes = True
-    op_class = 'Conv-BN-MaxPool-LIF'
-
     def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
         super().__init__()
         self.convbn = ConvBN(in_ch, out_ch)
@@ -90,9 +80,6 @@ class ConvBNMaxPoolLIFStage(nn.Module):
 
 
 class LIFConvBNMaxPoolLIFStage(nn.Module):
-    emits_hidden_spikes = True
-    op_class = 'LIF-Conv-BN-MaxPool-LIF'
-
     def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
         super().__init__()
         self.pre_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pre_lif')
@@ -105,9 +92,6 @@ class LIFConvBNMaxPoolLIFStage(nn.Module):
 
 
 class DepthwiseSeparableStage(nn.Module):
-    emits_hidden_spikes = True
-    op_class = 'SpikingDepthwiseSeparableConv'
-
     def __init__(self, in_ch: int, out_ch: int, pool: bool = True, surrogate_alpha: float = 4.0) -> None:
         super().__init__()
         self.pre_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pre_lif')
@@ -134,8 +118,6 @@ class MSResidualBlock(nn.Module):
     """
 
     residual_type = 'ms'
-    emits_hidden_spikes = True
-    op_class = 'MSResidual'
 
     def __init__(self, channels: int, surrogate_alpha: float = 4.0) -> None:
         super().__init__()

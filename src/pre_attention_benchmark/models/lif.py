@@ -33,10 +33,6 @@ class MultiStepLIF(nn.Module):
     a sigmoid surrogate gradient in backward pass.
     """
 
-    track_metrics = True
-    op_class = 'Compare/Threshold'
-    requires_state = True
-
     def __init__(self, beta: float = 0.5, threshold: float = 1.0, reset: str = 'hard', surrogate_alpha: float = 4.0, name: str | None = None) -> None:
         super().__init__()
         self.beta = float(beta)
@@ -44,8 +40,6 @@ class MultiStepLIF(nn.Module):
         self.reset = reset
         self.surrogate_alpha = float(surrogate_alpha)
         self.name = name or 'lif'
-        self.last_state_shape: tuple[int, ...] | None = None
-        self.last_membrane_range: tuple[float, float] | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() < 3:
@@ -53,8 +47,6 @@ class MultiStepLIF(nn.Module):
         B, T = x.shape[:2]
         v = torch.zeros_like(x[:, 0])
         spikes = []
-        mem_min = None
-        mem_max = None
         for t in range(T):
             # Stato locale al layer, non comunicato fuori: all'esterno escono solo spike.
             v = self.beta * v + x[:, t]
@@ -66,12 +58,4 @@ class MultiStepLIF(nn.Module):
             else:
                 raise ValueError(f'Unknown reset mode {self.reset!r}')
             spikes.append(s)
-            cur_min = float(v.detach().min().cpu()) if v.numel() else 0.0
-            cur_max = float(v.detach().max().cpu()) if v.numel() else 0.0
-            # Range utile per capire se una variante sta saturando la membrana.
-            mem_min = cur_min if mem_min is None else min(mem_min, cur_min)
-            mem_max = cur_max if mem_max is None else max(mem_max, cur_max)
-        out = torch.stack(spikes, dim=1)
-        self.last_state_shape = tuple(v.shape)
-        self.last_membrane_range = (float(mem_min or 0.0), float(mem_max or 0.0))
-        return out
+        return torch.stack(spikes, dim=1)

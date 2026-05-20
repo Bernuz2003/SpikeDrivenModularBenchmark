@@ -31,7 +31,6 @@ model:
     name: identity
   head:
     name: spatio_temporal_avg_readout
-    terminal_readout: true
 
 training:
   epochs: 1
@@ -52,7 +51,4 @@ evaluation:
     enabled: false
 
 logging:
-  save_layer_metrics: true
-  save_frequency_metrics: true
-  save_temporal_metrics: true
   output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/cifar10_dvs_quick_check

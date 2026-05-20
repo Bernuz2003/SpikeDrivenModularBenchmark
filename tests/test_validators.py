@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from pre_attention_benchmark.config import load_config, validate_pre_attention_config, ConfigError
 from pre_attention_benchmark.datasets import CachedEncodedDataset, EncodedEventDataset, build_encoder
-from pre_attention_benchmark.metrics.collector import MetricsCollector
+from pre_attention_benchmark.metrics.activity import ActivityProfiler
 from pre_attention_benchmark.models.heads import build_head, describe_head
 from pre_attention_benchmark.models.validators import validate_hidden_outputs
 
@@ -123,18 +123,16 @@ def test_spikevision_head_requires_feature_map_config():
 
 def test_hidden_boundary_validator_catches_non_binary_output():
     class BadBoundary(torch.nn.Module):
-        emits_hidden_spikes = True
-
         def forward(self, x):
             return x + 0.5
 
     class BadModel(torch.nn.Module):
         def __init__(self):
             super().__init__()
-            self.bad = BadBoundary()
+            self.feature_extractor = BadBoundary()
 
         def forward(self, x, validate_hidden_binary=False):
-            return self.bad(x).flatten(1)[:, :2]
+            return self.feature_extractor(x).flatten(1)[:, :2]
 
     sample = torch.zeros(1, 2, 2, 4, 4)
     with pytest.raises(RuntimeError, match='Hidden spike communication violated'):
@@ -143,10 +141,10 @@ def test_hidden_boundary_validator_catches_non_binary_output():
 
 def test_temporal_density_supports_tokens():
     # Caso token [B,T,N,D], diverso dalle mappe [B,T,C,H,W] viste dai conv.
-    collector = MetricsCollector(torch.nn.Identity(), run_id='test')
+    profiler = ActivityProfiler(torch.nn.Identity(), run_id='test')
     x = torch.zeros(2, 3, 4, 5)
     x[:, 1] = 1
-    mean, std, burst, per_timestep = collector._temporal_density(x, True)
+    mean, std, burst, per_timestep = profiler._temporal_density(x, True, scope='feature_extractor')
     assert per_timestep == [0.0, 1.0, 0.0]
     assert mean > 0
     assert std > 0

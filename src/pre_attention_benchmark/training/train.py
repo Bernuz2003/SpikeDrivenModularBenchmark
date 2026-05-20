@@ -20,7 +20,7 @@ from pre_attention_benchmark.config import (
 from pre_attention_benchmark.datasets import build_datasets, dataset_metadata
 from pre_attention_benchmark.models import build_model
 from pre_attention_benchmark.models.validators import validate_model_static, validate_hidden_outputs
-from pre_attention_benchmark.metrics import MetricsCollector, summarize_layer_metrics
+from pre_attention_benchmark.metrics import ActivityProfiler, summarize_activity_metrics
 from pre_attention_benchmark.reporting.report import generate_run_report
 from pre_attention_benchmark.training.utils import seed_everything, get_device, accuracy_top1, save_json, count_params, configure_torch_runtime
 
@@ -53,7 +53,7 @@ def train_one_epoch(model, loader, optimizer, device, epoch: int | None = None, 
     return total_loss / max(1, n), total_acc / max(1, n)
 
 
-def evaluate(model, loader, device, collector: MetricsCollector | None = None, profile_batches: int = 1):
+def evaluate(model, loader, device, profiler: ActivityProfiler | None = None, profile_batches: int = 1):
     model.eval()
     total_loss = 0.0
     total_acc = 0.0
@@ -65,20 +65,20 @@ def evaluate(model, loader, device, collector: MetricsCollector | None = None, p
             labels = labels.to(device)
             # Profilare tutti i batch rende le run lunghe inutilmente pesanti;
             # bastano pochi batch stabili per confrontare i candidati.
-            if collector is not None and profiled < profile_batches:
-                collector.enable()
+            if profiler is not None and profiled < profile_batches:
+                profiler.enable()
                 profiled += 1
             else:
-                if collector is not None:
-                    collector.disable()
+                if profiler is not None:
+                    profiler.disable()
             logits = model(spikes, validate_hidden_binary=True)
             loss = F.cross_entropy(logits, labels)
             bs = labels.numel()
             total_loss += float(loss.item()) * bs
             total_acc += accuracy_top1(logits, labels) * bs
             n += bs
-    if collector is not None:
-        collector.disable()
+    if profiler is not None:
+        profiler.disable()
     return total_loss / max(1, n), total_acc / max(1, n)
 
 
@@ -123,13 +123,22 @@ def input_spike_profile(loader, max_batches: int = 4) -> dict:
         if batches >= max_batches:
             break
     if batches == 0:
-        return {'input_spike_count': 0, 'input_spike_density': 0, 'input_spike_density_per_timestep': [], 'profiled_samples': 0}
+        return {
+            'input_spike_count_mean_per_batch': 0,
+            'input_spike_count_mean_per_sample': 0,
+            'input_spike_density': 0,
+            'input_spike_density_per_timestep': [],
+            'profiled_batches': 0,
+            'profiled_samples': 0,
+        }
     # media densità per timestep sui batch
     per_timestep = (per_timestep_sum / batches).cpu().tolist()
     return {
-        'input_spike_count': total_spikes / batches, # NOME FUORVIANTE! Si tratta di media spike per batch
+        'input_spike_count_mean_per_batch': total_spikes / batches,
+        'input_spike_count_mean_per_sample': total_spikes / max(1, samples),
         'input_spike_density': total_spikes / max(1, total_numel),
         'input_spike_density_per_timestep': [float(v) for v in per_timestep],
+        'profiled_batches': batches,
         'profiled_samples': samples,
     }
 
@@ -310,14 +319,14 @@ def run(config_path: str | Path) -> dict:
         final_ckpt['scheduler'] = scheduler.state_dict()
     torch.save(final_ckpt, out_dir / 'checkpoint_final.pt')
 
-    collector = MetricsCollector(model, run_id=cfg['experiment']['name'])
-    collector.attach()
-    collector.reset()
+    profiler = ActivityProfiler(model, run_id=cfg['experiment']['name'], time_steps=int(cfg['encoder']['T']))
+    profiler.attach()
+    profiler.reset()
     print('profiling=layerwise_metrics', flush=True)
-    val_loss, val_acc = evaluate(model, val_loader, device, collector=collector, profile_batches=int(cfg['training'].get('profile_batches', 1)))
-    layer_df = collector.save(out_dir / 'metrics_layerwise.csv', out_dir / 'profile.json')
-    collector.close()
-    metric_summary = summarize_layer_metrics(layer_df)
+    val_loss, val_acc = evaluate(model, val_loader, device, profiler=profiler, profile_batches=int(cfg['training'].get('profile_batches', 1)))
+    layer_df = profiler.save(out_dir / 'metrics_layerwise.csv', out_dir / 'profile.json')
+    profiler.close()
+    metric_summary = summarize_activity_metrics(layer_df)
     robustness = evaluate_robustness(model, cfg, device, clean_acc=val_acc)
     save_json({'clean_accuracy_top1': float(val_acc), **robustness}, out_dir / 'robustness.json')
     git_meta = get_git_metadata()

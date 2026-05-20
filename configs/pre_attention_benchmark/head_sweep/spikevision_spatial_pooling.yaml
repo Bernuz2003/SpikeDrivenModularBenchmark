@@ -31,7 +31,6 @@ model:
     name: identity
   head:
     name: spikevision_spatial_pooling
-    terminal_readout: true
     pool_regions: 1
     threshold: 3.0
 
@@ -50,7 +49,4 @@ training:
   num_workers: 4
 
 logging:
-  save_layer_metrics: true
-  save_frequency_metrics: true
-  save_temporal_metrics: true
   output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/head_spikevision_spatial_pooling

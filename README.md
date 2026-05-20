@@ -1,6 +1,6 @@
 # Pre-Attention Benchmark
 
-Framework modulare per valutare componenti spike-driven prima dell'introduzione di un modulo di attention reale: encoder event-to-spike, feature extractor/tokenizer, head di classificazione, metriche hardware-aware e report Pareto.
+Framework modulare per valutare componenti spike-driven prima dell'introduzione di un modulo di attention reale: encoder event-to-spike, feature extractor/tokenizer, head di classificazione, profiling di attivita spike e report aggregati.
 
 ## Cosa Implementa
 
@@ -11,8 +11,8 @@ Framework modulare per valutare componenti spike-driven prima dell'introduzione 
 - Feature extractor spike-driven con varianti convolutional, residual MS, depthwise separable, hierarchical tokenizer e dual-path.
 - Attention forzata a `identity`, per misurare solo la qualita dei componenti pre-attention.
 - Head terminali: spatio-temporal average, SpikeVision-like spatial pooling e class-neuron accumulator.
-- Metriche layer-wise: firing rate, spike count, burstiness, memory proxy, SOPs proxy, classi operative e high-frequency ratio.
-- Report run-level, aggregazione Pareto e decision table.
+- Activity profiling layer-wise: firing rate input/output, spike count, burstiness, densita temporale e struttura dei layer.
+- Report run-level, aggregazione trade-off e decision table.
 - Test automatici sui validator e sulle parti eseguibili senza dataset esterni.
 
 ## Installazione
@@ -103,7 +103,7 @@ bash scripts/run_pre_attention_suite.sh configs/local/pre_attention_benchmark
 python scripts/aggregate_reports.py
 ```
 
-Il report aggregato produce `summary.csv`, `pareto_front.csv`, grafici Pareto accuracy/costo e una decision table preliminare per scegliere i candidati da portare nella fase attention.
+Il report aggregato produce `summary.csv`, `pareto_front.csv`, grafici accuracy/parametri/attivita e una decision table preliminare per scegliere i candidati da portare nella fase attention.
 
 Ogni run usa un solo dataset, definito da `dataset.name` nella YAML. Non c'e merge automatico tra CIFAR10-DVS e DVS128 Gesture. I risultati restano separati nel campo `dataset` e nei path sotto `${PREATTN_RUNS_ROOT}/<dataset>/...`.
 

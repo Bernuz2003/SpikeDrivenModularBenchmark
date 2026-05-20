@@ -23,10 +23,6 @@ class FeatureExtractorBase(nn.Module):
 
 
 class StackedStages(FeatureExtractorBase):
-    track_metrics = True
-    emits_hidden_spikes = True
-    op_class = 'FeatureExtractorOutput'
-
     def __init__(
         self,
         stages: list[nn.Module],
@@ -61,7 +57,7 @@ class StackedStages(FeatureExtractorBase):
             # downsampling e canali effettivi invece di fidarsi della config.
             token_count = int(h * w)
             embedding_dim = int(c)
-        primitive_stages = sum(1 for s in self.stages if getattr(s, 'op_class', '') != 'MSResidual')
+        primitive_stages = sum(1 for s in self.stages if s.__class__.__name__ != 'MSResidualBlock')
         return {
             'name': self.extractor_name,
             'num_stages': primitive_stages,
@@ -72,7 +68,7 @@ class StackedStages(FeatureExtractorBase):
             'token_count_N': token_count,
             'embedding_dim_D': embedding_dim,
             'uses_ms_residual': self.residual == 'ms',
-            'operators': sorted({getattr(s, 'op_class', s.__class__.__name__) for s in self.stages}),
+            'operators': sorted({_stage_operator_name(s) for s in self.stages}),
         }
 
 
@@ -172,9 +168,6 @@ class DualPathHighFrequencyExtractor(FeatureExtractorBase):
         self.channels = channels
         self.last_feature_shape = None
         self.extractor_name = 'dual_path_high_frequency'
-        self.emits_hidden_spikes = True
-        self.track_metrics = True
-        self.op_class = 'DualPathHighFrequencyOutput'
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Fusione a livello membrana: la somma resta interna, fuori passa il LIF.
@@ -203,3 +196,14 @@ class DualPathHighFrequencyExtractor(FeatureExtractorBase):
             'uses_ms_residual': False,
             'operators': ['Conv-BN-MaxPool-LIF', 'SpikingDepthwiseSeparableConv', 'membrane_fusion_lif'],
         }
+
+
+def _stage_operator_name(stage: nn.Module) -> str:
+    names = {
+        'ConvBNLIFMaxPoolStage': 'Conv-BN-LIF-MaxPool',
+        'ConvBNMaxPoolLIFStage': 'Conv-BN-MaxPool-LIF',
+        'LIFConvBNMaxPoolLIFStage': 'LIF-Conv-BN-MaxPool-LIF',
+        'DepthwiseSeparableStage': 'SpikingDepthwiseSeparableConv',
+        'MSResidualBlock': 'MSResidual',
+    }
+    return names.get(stage.__class__.__name__, stage.__class__.__name__)

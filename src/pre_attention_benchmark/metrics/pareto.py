@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def pareto_front(df: pd.DataFrame, acc_col: str = 'accuracy_top1', cost_cols: list[str] | None = None) -> pd.DataFrame:
-    cost_cols = cost_cols or ['total_sops_proxy', 'max_state_mem_bits_per_sample', 'max_buffer_mem_bits']
+    cost_cols = cost_cols or ['total_params', 'input_spike_density', 'weighted_output_firing_rate']
     if df.empty:
         return df.copy()
     keep = []
@@ -13,8 +13,7 @@ def pareto_front(df: pd.DataFrame, acc_col: str = 'accuracy_top1', cost_cols: li
         for j, b in df.iterrows():
             if i == j:
                 continue
-            # Un punto domina se non perde in accuracy, non costa di piu e migliora
-            # almeno una dimensione: e il criterio Pareto classico per il report.
+            # Frontiera leggera: qualità contro complessità parametrica e attività spike.
             better_acc = b[acc_col] >= a[acc_col]
             lower_costs = all(b[c] <= a[c] for c in cost_cols if c in df.columns)
             strict = (b[acc_col] > a[acc_col]) or any(b[c] < a[c] for c in cost_cols if c in df.columns)
