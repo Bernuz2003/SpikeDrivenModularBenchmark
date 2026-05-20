@@ -61,7 +61,9 @@ class SpatioTemporalAvgReadout(nn.Module):
         self.last_pooled_shape: tuple[int, ...] | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # mean pooling spaziale per timestep
         pooled_t = spatial_average_per_timestep(x)  # [B,T,D]
+        # mean pooling temporale
         pooled = pooled_t.mean(dim=1)  # [B,D]
         self.last_pooled_shape = tuple(pooled.shape)
         return self.fc(pooled)
@@ -99,7 +101,7 @@ class SpikeVisionSpatialPoolingHead(nn.Module):
             groups=self.in_channels,
             bias=False,
         )
-        nn.init.constant_(self.spatial_pool.weight, 1.0)
+        nn.init.xavier_uniform_(self.spatial_pool.weight)
         self.threshold = StatelessThreshold(threshold=threshold, surrogate_alpha=surrogate_alpha, name='spikevision_spatial_threshold')
         self.fc = nn.Linear(self.in_channels * self.pool_regions, num_classes)
         self.last_threshold_shape: tuple[int, ...] | None = None
@@ -179,6 +181,7 @@ class ClassNeuronAccumulatorHead(nn.Module):
         return self.threshold_value.to(dtype=dtype, device=device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # mean pooling spaziale per timestep
         pooled = spatial_average_per_timestep(x)  # [B,T,D]
         currents = self.fc(pooled)
         beta = self._beta(currents.dtype, currents.device)
@@ -187,7 +190,7 @@ class ClassNeuronAccumulatorHead(nn.Module):
         spike_count = torch.zeros_like(mem)
         for ti in range(currents.shape[1]):
             # Neuroni di classe terminali: accumulano correnti real-valued e
-            # producono spike con surrogate gradient, senza mescolare mem e count.
+            # producono spike con surrogate gradient
             mem = beta * mem + currents[:, ti]
             spk = spike_fn(mem - threshold, self.surrogate_alpha)
             spike_count = spike_count + spk

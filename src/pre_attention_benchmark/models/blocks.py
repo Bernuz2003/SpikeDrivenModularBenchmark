@@ -109,6 +109,40 @@ class DepthwiseSeparableStage(nn.Module):
         return x
 
 
+class StridedConvStemStage(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
+        super().__init__()
+        self.down = ConvBN(in_ch, out_ch, stride=2)
+        self.down_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='down_lif')
+        self.refine = ConvBN(out_ch, out_ch)
+        self.refine_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='refine_lif')
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Downsampling appreso: niente MaxPool, la riduzione spaziale la decide
+        # la convoluzione stride 2. Poi ribinarizziamo prima di uscire dallo stage.
+        x = self.down_lif(self.down(x))
+        return self.refine_lif(self.refine(x))
+
+
+class PolaritySeparableStemStage(nn.Module):
+    def __init__(self, out_ch: int, surrogate_alpha: float = 4.0) -> None:
+        super().__init__()
+        if out_ch < 2:
+            raise ValueError('PolaritySeparableStemStage requires out_ch >= 2.')
+        left = out_ch // 2
+        right = out_ch - left
+        # Primo stem DVS-specific: ON/OFF non vengono mischiati subito.
+        self.polarity_0 = ConvBNMaxPoolLIFStage(1, left, surrogate_alpha=surrogate_alpha)
+        self.polarity_1 = ConvBNMaxPoolLIFStage(1, right, surrogate_alpha=surrogate_alpha)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 5 or x.shape[2] != 2:
+            raise ValueError(f'PolaritySeparableStemStage expects [B,T,2,H,W], got {tuple(x.shape)}.')
+        p0 = self.polarity_0(x[:, :, 0:1])
+        p1 = self.polarity_1(x[:, :, 1:2])
+        return torch.cat([p0, p1], dim=2)
+
+
 class MSResidualBlock(nn.Module):
     """Membrane-level fusion followed by LIF, with binary output only.
 

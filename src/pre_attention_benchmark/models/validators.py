@@ -10,9 +10,10 @@ HIDDEN_BOUNDARY_CLASS_NAMES = {
     'ConvBNMaxPoolLIFStage',
     'LIFConvBNMaxPoolLIFStage',
     'DepthwiseSeparableStage',
+    'StridedConvStemStage',
+    'PolaritySeparableStemStage',
     'MSResidualBlock',
     'StackedStages',
-    'DualPathHighFrequencyExtractor',
 }
 
 

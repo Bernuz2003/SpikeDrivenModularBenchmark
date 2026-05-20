@@ -88,9 +88,9 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
 
     cfg.setdefault('model', {})
     cfg['model'].setdefault('feature_extractor', {})
-    cfg['model']['feature_extractor'].setdefault('name', 'conv_bn_lif_maxpool')
-    cfg['model']['feature_extractor'].setdefault('channels', [16, 32])
-    cfg['model']['feature_extractor'].setdefault('residual', 'none')
+    cfg['model']['feature_extractor'].setdefault('name', 'sps_like_ms')
+    cfg['model']['feature_extractor'].setdefault('channels', [32, 64, 128])
+    cfg['model']['feature_extractor'].setdefault('residual', 'ms')
     cfg['model']['feature_extractor'].setdefault('output_format', 'tokens')
 
     cfg['model'].setdefault('attention', {})
@@ -189,12 +189,7 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
         )
 
     fe = cfg.get('model', {}).get('feature_extractor', {})
-    residual = fe.get('residual', 'none')
-    if residual not in ('none', None, 'ms'):
-        raise ConfigError(
-            f"pre-attention benchmark forbids non-MS residuals. Got residual={residual!r}."
-        )
-
+    residual = fe.get('residual', 'ms')
     if str(residual).lower() == 'sew':
         raise ConfigError("SEW residual is forbidden because it can propagate multi-bit spike sums.")
 
@@ -223,6 +218,23 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
     output_format = fe.get('output_format', 'tokens')
     if output_format not in ('tokens', 'feature_map', 'maps'):
         raise ConfigError(f"feature_extractor.output_format must be 'tokens' or 'feature_map', got {output_format!r}.")
+
+    allowed_feature_extractors = {
+        'sps_like_ms',
+        'evidence_pooling_ms',
+        'spike_input_ms',
+        'depthwise_separable_ms',
+        'strided_conv_stem_ms',
+        'polarity_separable_stem_ms',
+    }
+    fe_name = fe.get('name', '')
+    if fe_name not in allowed_feature_extractors:
+        raise ConfigError(f"feature_extractor.name must be one of {sorted(allowed_feature_extractors)}, got {fe_name!r}.")
+    if residual != 'ms':
+        raise ConfigError("feature_extractor.residual must be 'ms' for the current pre-attention feature-extractor sweep.")
+    channels = [int(c) for c in fe.get('channels', [])]
+    if channels != [32, 64, 128]:
+        raise ConfigError("feature_extractor.channels must be [32, 64, 128] in the current pre-attention benchmark configs.")
 
     head = cfg.get('model', {}).get('head', {})
     allowed_heads = {'spatio_temporal_avg_readout', 'spikevision_spatial_pooling', 'class_neuron_accumulator'}

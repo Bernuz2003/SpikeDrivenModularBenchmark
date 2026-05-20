@@ -1,5 +1,5 @@
 experiment:
-  name: fe_hierarchical_tokenizer
+  name: fe_A_sps_like_ms
   benchmark: pre_attention
   seed: 42
 
@@ -23,9 +23,9 @@ encoder:
 
 model:
   feature_extractor:
-    name: hierarchical_tokenizer
-    channels: [8, 16, 32]
-    residual: none
+    name: sps_like_ms
+    channels: [32, 64, 128]
+    residual: ms
     output_format: tokens
   attention:
     name: identity
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_hierarchical_tokenizer
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_A_sps_like_ms

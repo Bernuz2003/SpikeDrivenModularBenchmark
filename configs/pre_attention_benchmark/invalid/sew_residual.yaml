@@ -23,8 +23,8 @@ encoder:
 
 model:
   feature_extractor:
-    name: conv_bn_lif_maxpool
-    channels: [8]
+    name: sps_like_ms
+    channels: [32, 64, 128]
     residual: sew
     output_format: tokens
   attention:

@@ -1,5 +1,5 @@
 experiment:
-  name: fe_depthwise_separable
+  name: fe_C_spike_input_ms
   benchmark: pre_attention
   seed: 42
 
@@ -23,9 +23,9 @@ encoder:
 
 model:
   feature_extractor:
-    name: depthwise_separable
-    channels: [16, 32]
-    residual: none
+    name: spike_input_ms
+    channels: [32, 64, 128]
+    residual: ms
     output_format: tokens
   attention:
     name: identity
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_depthwise_separable
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_C_spike_input_ms

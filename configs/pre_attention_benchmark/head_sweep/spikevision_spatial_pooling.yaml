@@ -23,9 +23,9 @@ encoder:
 
 model:
   feature_extractor:
-    name: conv_bn_maxpool_lif
-    channels: [16, 32]
-    residual: none
+    name: evidence_pooling_ms
+    channels: [32, 64, 128]
+    residual: ms
     output_format: feature_map
   attention:
     name: identity

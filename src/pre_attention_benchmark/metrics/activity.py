@@ -46,7 +46,7 @@ class ActivityLayerRecord:
 
 
 class ActivityProfiler:
-    """Misura attivita spike e struttura osservata, senza stimare costi hardware."""
+    """Misura attivita spike e struttura osservata"""
 
     def __init__(self, model: nn.Module, run_id: str, time_steps: int | None = None) -> None:
         self.model = model

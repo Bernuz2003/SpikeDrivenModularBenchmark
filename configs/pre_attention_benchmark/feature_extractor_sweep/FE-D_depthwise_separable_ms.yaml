@@ -1,5 +1,5 @@
 experiment:
-  name: fe_conv_bn_maxpool_lif
+  name: fe_D_depthwise_separable_ms
   benchmark: pre_attention
   seed: 42
 
@@ -23,9 +23,9 @@ encoder:
 
 model:
   feature_extractor:
-    name: conv_bn_maxpool_lif
-    channels: [16, 32]
-    residual: none
+    name: depthwise_separable_ms
+    channels: [32, 64, 128]
+    residual: ms
     output_format: tokens
   attention:
     name: identity
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_conv_bn_maxpool_lif
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_D_depthwise_separable_ms

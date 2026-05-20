@@ -1,5 +1,5 @@
 experiment:
-  name: fe_resnet_local_ms
+  name: fe_G_polarity_separable_stem_ms
   benchmark: pre_attention
   seed: 42
 
@@ -23,8 +23,8 @@ encoder:
 
 model:
   feature_extractor:
-    name: resnet_local_ms
-    channels: [16, 32]
+    name: polarity_separable_stem_ms
+    channels: [32, 64, 128]
     residual: ms
     output_format: tokens
   attention:
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_resnet_local_ms
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_G_polarity_separable_stem_ms
