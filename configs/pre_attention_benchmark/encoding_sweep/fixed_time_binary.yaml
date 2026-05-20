@@ -1,5 +1,5 @@
 experiment:
-  name: enc_fixed_time_binary_T4
+  name: enc_fixed_time_binary
   benchmark: pre_attention
   seed: 42
 
@@ -16,7 +16,7 @@ dataset:
 
 encoder:
   name: fixed_time_binary
-  T: 4
+  T: 16
   polarity_channels: true
   binarize: true
   pixel_threshold: 3
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/enc_fixed_time_binary_T4
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/enc_fixed_time_binary

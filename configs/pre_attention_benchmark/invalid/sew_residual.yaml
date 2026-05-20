@@ -16,7 +16,7 @@ dataset:
 
 encoder:
   name: fixed_time_binary
-  T: 4
+  T: 16
   polarity_channels: true
   binarize: true
   pixel_threshold: 3

@@ -81,7 +81,7 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
 
     cfg.setdefault('encoder', {})
     cfg['encoder'].setdefault('name', 'fixed_time_binary')
-    cfg['encoder'].setdefault('T', 8)
+    cfg['encoder'].setdefault('T', 16)
     cfg['encoder'].setdefault('polarity_channels', True)
     cfg['encoder'].setdefault('binarize', True)
     cfg['encoder'].setdefault('pixel_threshold', 0)
