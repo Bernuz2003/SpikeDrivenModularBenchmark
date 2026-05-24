@@ -16,14 +16,14 @@ dataset:
 
 encoder:
   name: fixed_time_binary
-  T: 16
+  T: 8
   polarity_channels: true
   binarize: true
   pixel_threshold: 3
 
 model:
   feature_extractor:
-    name: evidence_pooling_ms
+    name: sps_like_ms
     channels: [32, 64, 128]
     residual: ms
     output_format: feature_map
