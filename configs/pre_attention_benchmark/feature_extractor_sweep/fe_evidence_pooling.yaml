@@ -1,5 +1,5 @@
 experiment:
-  name: fe_A_sps_like_ms
+  name: fe_evidence_pooling
   benchmark: pre_attention
   seed: 42
 
@@ -23,7 +23,7 @@ encoder:
 
 model:
   feature_extractor:
-    name: sps_like_ms
+    name: evidence_pooling_ms
     channels: [32, 64, 128]
     residual: ms
     output_format: tokens
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_A_sps_like_ms
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_evidence_pooling

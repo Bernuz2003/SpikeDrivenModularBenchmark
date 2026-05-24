@@ -101,7 +101,7 @@ def build_encoder(cfg: dict[str, Any], dataset_cfg: dict[str, Any]):
     h = int(dataset_cfg.get('height', cfg.get('height', 128)))
     w = int(dataset_cfg.get('width', cfg.get('width', 128)))
     common = dict(
-        T=int(cfg.get('T', 8)),
+        T=int(cfg.get('T', 16)),
         height=h,
         width=w,
         polarity_channels=cfg.get('polarity_channels', True),

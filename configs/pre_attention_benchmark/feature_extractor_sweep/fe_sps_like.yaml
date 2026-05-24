@@ -1,5 +1,5 @@
 experiment:
-  name: fe_E_strided_conv_stem_ms
+  name: fe_sps_like
   benchmark: pre_attention
   seed: 42
 
@@ -23,7 +23,7 @@ encoder:
 
 model:
   feature_extractor:
-    name: strided_conv_stem_ms
+    name: sps_like_ms
     channels: [32, 64, 128]
     residual: ms
     output_format: tokens
@@ -47,4 +47,4 @@ training:
   num_workers: 4
 
 logging:
-  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_E_strided_conv_stem_ms
+  output_dir: ${PREATTN_RUNS_ROOT}/cifar10_dvs/fe_sps_like

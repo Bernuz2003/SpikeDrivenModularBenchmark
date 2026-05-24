@@ -8,11 +8,8 @@ from pre_attention_benchmark.training.utils import tensor_is_binary
 HIDDEN_BOUNDARY_CLASS_NAMES = {
     'ConvBNLIFMaxPoolStage',
     'ConvBNMaxPoolLIFStage',
-    'LIFConvBNMaxPoolLIFStage',
-    'DepthwiseSeparableStage',
+    'LIFConvBNLIFMaxPoolStage',
     'StridedConvStemStage',
-    'PolaritySeparableStemStage',
-    'MSResidualBlock',
     'StackedStages',
 }
 

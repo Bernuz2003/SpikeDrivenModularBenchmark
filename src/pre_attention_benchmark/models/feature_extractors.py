@@ -6,11 +6,8 @@ from torch import nn
 from .blocks import (
     ConvBNLIFMaxPoolStage,
     ConvBNMaxPoolLIFStage,
-    LIFConvBNMaxPoolLIFStage,
-    DepthwiseSeparableStage,
+    LIFConvBNLIFMaxPoolStage,
     StridedConvStemStage,
-    PolaritySeparableStemStage,
-    MSResidualBlock,
 )
 
 
@@ -58,12 +55,11 @@ class StackedStages(FeatureExtractorBase):
             # downsampling e canali effettivi invece di fidarsi della config.
             token_count = int(h * w)
             embedding_dim = int(c)
-        primitive_stages = sum(1 for s in self.stages if s.__class__.__name__ != 'MSResidualBlock')
         return {
             'name': self.extractor_name,
-            'num_stages': primitive_stages,
+            'num_stages': len(self.stages),
             'channels': self.channels,
-            'downsampling_factor': 2 ** primitive_stages,
+            'downsampling_factor': 2 ** len(self.stages),
             'output_format': self.output_format,
             'feature_shape': feature_shape,
             'token_count_N': token_count,
@@ -81,15 +77,8 @@ FEATURE_EXTRACTOR_NAMES = {
     'sps_like_ms',
     'evidence_pooling_ms',
     'spike_input_ms',
-    'depthwise_separable_ms',
     'strided_conv_stem_ms',
-    'polarity_separable_stem_ms',
 }
-
-
-def _append_stage(stages: list[nn.Module], stage: nn.Module, channels: int, surrogate_alpha: float) -> None:
-    stages.append(stage)
-    stages.append(MSResidualBlock(channels, surrogate_alpha=surrogate_alpha))
 
 
 def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alpha: float = 4.0) -> nn.Module:
@@ -100,50 +89,34 @@ def build_feature_extractor(cfg: dict[str, Any], in_channels: int, surrogate_alp
 
     if name not in FEATURE_EXTRACTOR_NAMES:
         raise ValueError(f'Unknown feature extractor: {name}')
-    if residual != 'ms':
-        raise ValueError(f'{name} requires residual: ms in the main pre-attention sweep.')
+    if residual not in ('none', None, 'ms'):
+        raise ValueError(f'Only residual none/ms is allowed in pre-attention benchmark, got {residual!r}')
+    use_ms_residual = residual == 'ms'
 
     stages: list[nn.Module] = []
     prev = in_channels  # Canali in ingresso allo stage corrente
 
-    if name == 'sps_like_ms':  # FE-A
+    if name == 'sps_like_ms':
         for ch in channels:
-            _append_stage(stages, ConvBNLIFMaxPoolStage(prev, ch, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
+            stages.append(ConvBNLIFMaxPoolStage(prev, ch, surrogate_alpha=surrogate_alpha, use_ms_residual=use_ms_residual))
             prev = ch   # Lo stage successivo riceve in input i canali appena prodotti
         return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
-    if name == 'evidence_pooling_ms':  # FE-B
+    if name == 'evidence_pooling_ms':
         for ch in channels:
-            _append_stage(stages, ConvBNMaxPoolLIFStage(prev, ch, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
+            stages.append(ConvBNMaxPoolLIFStage(prev, ch, surrogate_alpha=surrogate_alpha, use_ms_residual=use_ms_residual))
             prev = ch
         return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
-    if name == 'spike_input_ms':  # FE-C
+    if name == 'spike_input_ms':
         for ch in channels:
-            _append_stage(stages, LIFConvBNMaxPoolLIFStage(prev, ch, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
+            stages.append(LIFConvBNLIFMaxPoolStage(prev, ch, surrogate_alpha=surrogate_alpha, use_ms_residual=use_ms_residual))
             prev = ch
         return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
-    if name == 'depthwise_separable_ms':  # FE-D
+    if name == 'strided_conv_stem_ms':
         for ch in channels:
-            _append_stage(stages, DepthwiseSeparableStage(prev, ch, pool=True, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
-            prev = ch
-        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
-
-    if name == 'strided_conv_stem_ms':  # FE-E
-        for ch in channels:
-            _append_stage(stages, StridedConvStemStage(prev, ch, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
-            prev = ch
-        return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
-
-    if name == 'polarity_separable_stem_ms':  # FE-G
-        if in_channels != 2:
-            raise ValueError('polarity_separable_stem_ms requires DVS polarity input with exactly 2 channels.')
-        first = channels[0]
-        _append_stage(stages, PolaritySeparableStemStage(first, surrogate_alpha=surrogate_alpha), first, surrogate_alpha)
-        prev = first
-        for ch in channels[1:]:
-            _append_stage(stages, ConvBNMaxPoolLIFStage(prev, ch, surrogate_alpha=surrogate_alpha), ch, surrogate_alpha)
+            stages.append(StridedConvStemStage(prev, ch, surrogate_alpha=surrogate_alpha, use_ms_residual=use_ms_residual))
             prev = ch
         return StackedStages(stages, output_format=output_format, name=name, channels=channels, residual=residual)
 
@@ -154,10 +127,7 @@ def _stage_operator_name(stage: nn.Module) -> str:
     names = {
         'ConvBNLIFMaxPoolStage': 'Conv-BN-LIF-MaxPool',
         'ConvBNMaxPoolLIFStage': 'Conv-BN-MaxPool-LIF',
-        'LIFConvBNMaxPoolLIFStage': 'LIF-Conv-BN-MaxPool-LIF',
-        'DepthwiseSeparableStage': 'SpikingDepthwiseSeparableConv',
+        'LIFConvBNLIFMaxPoolStage': 'LIF-Conv-BN-LIF-MaxPool',
         'StridedConvStemStage': 'StridedConvStem',
-        'PolaritySeparableStemStage': 'PolaritySeparableStem',
-        'MSResidualBlock': 'MSResidual',
     }
     return names.get(stage.__class__.__name__, stage.__class__.__name__)

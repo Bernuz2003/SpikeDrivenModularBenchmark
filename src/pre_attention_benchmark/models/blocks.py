@@ -57,109 +57,79 @@ class TDMaxPool(nn.Module):
         return batch_to_time(y, bt)
 
 
-class ConvBNLIFMaxPoolStage(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        self.convbn = ConvBN(in_ch, out_ch)
-        self.lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='lif')
-        self.pool = TDMaxPool(2, 2)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.pool(self.lif(self.convbn(x)))
-
-
-class ConvBNMaxPoolLIFStage(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        self.convbn = ConvBN(in_ch, out_ch)
-        self.pool = TDMaxPool(2, 2)
-        self.lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='lif')
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.lif(self.pool(self.convbn(x)))
-
-
-class LIFConvBNMaxPoolLIFStage(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        self.pre_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pre_lif')
-        self.convbn = ConvBN(in_ch, out_ch)
-        self.pool = TDMaxPool(2, 2)
-        self.post_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='post_lif')
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.post_lif(self.pool(self.convbn(self.pre_lif(x))))
-
-
-class DepthwiseSeparableStage(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, pool: bool = True, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        self.pre_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pre_lif')
-        self.dw = ConvBN(in_ch, in_ch, kernel_size=3, groups=in_ch)
-        self.dw_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='dw_lif')
-        self.pw = ConvBN(in_ch, out_ch, kernel_size=1, padding=0)
-        self.pw_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pw_lif')
-        self.pool = TDMaxPool(2, 2) if pool else nn.Identity()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pre_lif(x)
-        x = self.dw_lif(self.dw(x))
-        x = self.pw_lif(self.pw(x))
-        x = self.pool(x)
-        return x
-
-
-class StridedConvStemStage(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        self.down = ConvBN(in_ch, out_ch, stride=2)
-        self.down_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='down_lif')
-        self.refine = ConvBN(out_ch, out_ch)
-        self.refine_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='refine_lif')
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Downsampling appreso: niente MaxPool, la riduzione spaziale la decide
-        # la convoluzione stride 2. Poi ribinarizziamo prima di uscire dallo stage.
-        x = self.down_lif(self.down(x))
-        return self.refine_lif(self.refine(x))
-
-
-class PolaritySeparableStemStage(nn.Module):
-    def __init__(self, out_ch: int, surrogate_alpha: float = 4.0) -> None:
-        super().__init__()
-        if out_ch < 2:
-            raise ValueError('PolaritySeparableStemStage requires out_ch >= 2.')
-        left = out_ch // 2
-        right = out_ch - left
-        # Primo stem DVS-specific: ON/OFF non vengono mischiati subito.
-        self.polarity_0 = ConvBNMaxPoolLIFStage(1, left, surrogate_alpha=surrogate_alpha)
-        self.polarity_1 = ConvBNMaxPoolLIFStage(1, right, surrogate_alpha=surrogate_alpha)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() != 5 or x.shape[2] != 2:
-            raise ValueError(f'PolaritySeparableStemStage expects [B,T,2,H,W], got {tuple(x.shape)}.')
-        p0 = self.polarity_0(x[:, :, 0:1])
-        p1 = self.polarity_1(x[:, :, 1:2])
-        return torch.cat([p0, p1], dim=2)
-
-
-class MSResidualBlock(nn.Module):
-    """Membrane-level fusion followed by LIF, with binary output only.
-
-    This is a practical implementation of the MS-residual principle:
-    non-binary sums stay inside the block as membrane current and are immediately
-    thresholded before communicating to the next block.
-    """
+class MSProjectionShortcut(nn.Module):
+    """Proiezione della shortcut MS quando canali o risoluzione cambiano."""
 
     residual_type = 'ms'
 
-    def __init__(self, channels: int, surrogate_alpha: float = 4.0) -> None:
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 2) -> None:
         super().__init__()
-        self.main = ConvBN(channels, channels)
-        self.out_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='ms_out_lif')
+        self.proj = ConvBN(in_ch, out_ch, kernel_size=1, stride=stride, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Qui la somma non e comunicazione tra blocchi: e corrente di membrana.
-        # Il LIF successivo riporta l'uscita a spike binari.
-        membrane_current = self.main(x) + x
-        return self.out_lif(membrane_current)
+        return self.proj(x)
+
+
+class ConvBNLIFMaxPoolStage(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0, use_ms_residual: bool = False) -> None:
+        super().__init__()
+        self.convbn = ConvBN(in_ch, out_ch)
+        self.lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='lif')
+        self.pool = TDMaxPool(2, 2)
+        self.shortcut = MSProjectionShortcut(in_ch, out_ch, stride=2) if use_ms_residual else None
+        self.out_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='ms_out_lif') if use_ms_residual else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.pool(self.lif(self.convbn(x)))
+        if self.shortcut is None:
+            return y
+        # Somma nel dominio di membrana dello stesso stage, poi ribinarizzazione.
+        return self.out_lif(y + self.shortcut(x))
+
+
+class ConvBNMaxPoolLIFStage(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0, use_ms_residual: bool = False) -> None:
+        super().__init__()
+        self.convbn = ConvBN(in_ch, out_ch)
+        self.pool = TDMaxPool(2, 2)
+        self.lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='lif')
+        self.shortcut = MSProjectionShortcut(in_ch, out_ch, stride=2) if use_ms_residual else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.pool(self.convbn(x))
+        if self.shortcut is not None:
+            y = y + self.shortcut(x)
+        return self.lif(y)
+
+
+class LIFConvBNLIFMaxPoolStage(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0, use_ms_residual: bool = False) -> None:
+        super().__init__()
+        self.pre_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='pre_lif')
+        self.convbn = ConvBN(in_ch, out_ch)
+        self.post_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='post_lif')
+        self.pool = TDMaxPool(2, 2)
+        self.shortcut = MSProjectionShortcut(in_ch, out_ch, stride=2) if use_ms_residual else None
+        self.out_lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='ms_out_lif') if use_ms_residual else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.pool(self.post_lif(self.convbn(self.pre_lif(x))))
+        if self.shortcut is None:
+            return y
+        return self.out_lif(y + self.shortcut(x))
+
+
+class StridedConvStemStage(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, surrogate_alpha: float = 4.0, use_ms_residual: bool = False) -> None:
+        super().__init__()
+        self.down = ConvBN(in_ch, out_ch, stride=2)
+        self.lif = MultiStepLIF(surrogate_alpha=surrogate_alpha, name='lif')
+        self.shortcut = MSProjectionShortcut(in_ch, out_ch, stride=2) if use_ms_residual else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Downsampling appreso: niente MaxPool, la riduzione spaziale la decide
+        # una sola convoluzione stride 2. La shortcut MS viene sommata prima del LIF.
+        y = self.down(x)
+        if self.shortcut is not None:
+            y = y + self.shortcut(x)
+        return self.lif(y)

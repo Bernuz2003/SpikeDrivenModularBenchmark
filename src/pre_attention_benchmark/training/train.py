@@ -319,6 +319,13 @@ def run(config_path: str | Path) -> dict:
         final_ckpt['scheduler'] = scheduler.state_dict()
     torch.save(final_ckpt, out_dir / 'checkpoint_final.pt')
 
+    profiled_checkpoint = 'checkpoint_final.pt'
+    if best_state is not None:
+        # Le metriche di attivita devono descrivere il modello selezionato per
+        # accuracy, non l'ultimo stato attraversato dal training.
+        model.load_state_dict(best_state)
+        profiled_checkpoint = 'checkpoint_best.pt'
+
     profiler = ActivityProfiler(model, run_id=cfg['experiment']['name'], time_steps=int(cfg['encoder']['T']))
     profiler.attach()
     profiler.reset()
@@ -350,6 +357,7 @@ def run(config_path: str | Path) -> dict:
         'accuracy_top1': float(val_acc),
         'loss_val': float(val_loss),
         'best_accuracy_top1': float(best_acc),
+        'profiled_checkpoint': profiled_checkpoint,
         'total_params': int(count_params(model)),
         'git_commit': get_git_commit(),
         'git_dirty': git_meta.get('dirty'),

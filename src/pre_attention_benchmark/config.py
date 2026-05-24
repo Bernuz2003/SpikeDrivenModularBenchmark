@@ -223,9 +223,7 @@ def validate_pre_attention_config(cfg: dict[str, Any]) -> None:
         'sps_like_ms',
         'evidence_pooling_ms',
         'spike_input_ms',
-        'depthwise_separable_ms',
         'strided_conv_stem_ms',
-        'polarity_separable_stem_ms',
     }
     fe_name = fe.get('name', '')
     if fe_name not in allowed_feature_extractors:

@@ -8,7 +8,7 @@ Framework modulare per valutare componenti spike-driven prima dell'introduzione 
 - Supporto reale via `tonic` per `CIFAR10-DVS` e `DVS128 Gesture`.
 - Encoder binari: fixed time-bin e fixed event-count, con soglia configurabile su istogramma locale.
 - Cache encoded per run in memoria (`uint8`/`bool`), cosi lo stesso sample non viene ricodificato a ogni epoca.
-- Feature extractor spike-driven con sei famiglie concettuali: SPS-like, evidence pooling, spike-input, depthwise separable, strided-conv stem e polarity-separable stem.
+- Feature extractor spike-driven con quattro famiglie concettuali: SPS-like, evidence pooling, spike-input e strided-conv stem.
 - Attention forzata a `identity`, per misurare solo la qualita dei componenti pre-attention.
 - Head terminali: spatio-temporal average, SpikeVision-like spatial pooling e class-neuron accumulator.
 - Activity profiling layer-wise: firing rate input/output, spike count, burstiness, densita temporale e struttura dei layer.

@@ -22,6 +22,7 @@ def generate_run_report(out_dir: str | Path, summary: dict, layer_df: pd.DataFra
         'accuracy_top1',
         'loss_val',
         'best_accuracy_top1',
+        'profiled_checkpoint',
         'total_params',
         'total_params_profiled',
         'input_spike_density',
